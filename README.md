@@ -131,7 +131,7 @@ This project is licensed under the Unlicense - see the [LICENSE](LICENSE) file f
 ## ✍️ Author
 
 **Emrah Akgül**
-- GitHub: [@emrahakgul](https://github.com/akgulemrah)
+- GitHub: [@akgulemrah](https://github.com/akgulemrah)
 
 ## 🙏 Acknowledgments
 
