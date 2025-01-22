@@ -1,7 +1,6 @@
 # StrUtil - Thread-Safe String Utility Library
 
 ![License](https://img.shields.io/badge/license-Unlicense-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
 ![Build](https://img.shields.io/badge/build-passing-success.svg)
 
 A lightweight, thread-safe string manipulation library for C, featuring dynamic memory management and comprehensive string operations.
