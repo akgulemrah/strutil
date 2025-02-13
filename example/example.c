@@ -11,7 +11,7 @@
 #include <string.h>
 #include "strutil.h"
 
-#define MAX_INPUT 1024
+#define STR_MAX_INPUT 1024
 #define MENU_EXIT 0
 
 // Helper function to clear input buffer
@@ -73,7 +73,7 @@ static void demo_basic_operations(void) {
         return;
     }
     
-    char input[MAX_INPUT];
+    char input[STR_MAX_INPUT];
     printf("Enter a string: ");
     get_input(input, sizeof(input));
     
@@ -112,7 +112,7 @@ static void demo_string_manipulation(void) {
         return;
     }
     
-    char input[MAX_INPUT];
+    char input[STR_MAX_INPUT];
     printf("Enter a string: ");
     get_input(input, sizeof(input));
     
@@ -153,7 +153,7 @@ static void demo_word_operations(void) {
         return;
     }
     
-    char input[MAX_INPUT], word[MAX_INPUT], replacement[MAX_INPUT];
+    char input[STR_MAX_INPUT], word[STR_MAX_INPUT], replacement[STR_MAX_INPUT];
     printf("Enter a sentence: ");
     get_input(input, sizeof(input));
     
