@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 /*
  * strutil.c - Implementation of a thread-safe, dynamic string library.
  *
@@ -22,42 +23,24 @@
 #include <ctype.h>
 #include <string.h>
 
-/*
- * init_mutex_attr - Initialize the mutex attribute for recursive locking.
- *
- * This helper function checks if the mutex attribute is already initialized;
- * if not, it initializes it and sets the type to PTHREAD_MUTEX_RECURSIVE.
- *
- * Returns:
- *   STR_OK on success or an error code (STR_LOCK) if initialization fails.
- */
-static inline Str_err_t init_mutex_attr(void) {
-	if (!mutex_attr_initialized) {
-		if (pthread_mutexattr_init(&mutex_attr) != 0) {
-			return STR_LOCK;
-		}
-		
-		if (pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
-			pthread_mutexattr_destroy(&mutex_attr);
-			return STR_LOCK;
-		}
-		
-		mutex_attr_initialized = true;
-	}
-	return STR_OK;
-}
+// FLAGS FOR str struct
+#define FLAG_DYNAMIC		(1 << 0) // 0000 0001
+#define FLAG_MUTEX_INIT 	(1 << 1) // 0000 0010
 
-/*
- * cleanup_mutex_attr - Clean up the mutex attribute.
- *
- * This helper function destroys the mutex attribute if it has been initialized.
- */
-static void cleanup_mutex_attr(void) {
-	if (mutex_attr_initialized) {
-		pthread_mutexattr_destroy(&mutex_attr);
-		mutex_attr_initialized = false;
-	}
-}
+#define SET_FLAG(flags, FLG) ((flags) |= (FLG))
+#define CLEAR_FLAG(flags, FLG) (flags &= ~(FLG))
+#define CHECK_FLAG(flags, FLG) (((flags) & (FLG)) != 0)
+
+static const size_t CHUNK_SIZE = 4096;	// Page size
+static const size_t MIN_CAPACITY = 16;	// Minimum initial capacity
+
+struct str {
+	unsigned int flags : 8;		// bit 0: FLAG_DYNAMIC, bit 1: FLAG_MUTEX_INIT, ...
+	char *data;		        // String data
+	size_t length;		        // Current string length
+	size_t capacity;		// Allocated capacity
+	pthread_mutex_t lock;           // Thread safety mutex
+};
 
 /*
  * str_init - Allocate and initialize a new dynamic string object.
@@ -68,45 +51,69 @@ static void cleanup_mutex_attr(void) {
  * Returns:
  *   Pointer to the new string object on success, or NULL on failure.
  */
-STR_WARN_UNUSED_RESULT STR_MALLOC str* str_init(void) {
-	Str_err_t err = init_mutex_attr();
-	if (err != STR_OK)
+struct str* str_init(void) {
+	pthread_mutexattr_t mutex_attr;
+	
+	struct str *self = (struct str *)malloc(sizeof(struct str));
+	if (!self) {
+		fprintf(stderr, "Error: malloc\n");
 		return NULL;
+	}
 	
-	str* self = (str*)malloc(sizeof(str));
-	if (!self)
-		return NULL;
-	
-	memset(self, 0, sizeof(str));
-	
-	if (pthread_mutex_init(&self->lock, &mutex_attr) != 0) {
+	memset(self, 0, sizeof(struct str));
+	if (pthread_mutexattr_init(&mutex_attr) != 0) {
 		free(self);
+		fprintf(stderr, "Error: pthread_mutexattr_init\n");
 		return NULL;
 	}
 
-	self->is_dynamic = true;
+	if (pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE_NP) != 0) {
+		free(self);
+		pthread_mutexattr_destroy(&mutex_attr);
+		fprintf(stderr, "Error: pthread_mutexattr_settype\n");
+		return NULL;
+	}
+
+	if (pthread_mutex_init(&self->lock, &mutex_attr) != 0) {
+		pthread_mutexattr_destroy(&mutex_attr);
+		free(self);
+		fprintf(stderr, "Error: pthread_mutex_init\n");
+		return NULL;
+	}
+
+	pthread_mutexattr_destroy(&mutex_attr);
+
+	SET_FLAG(self->flags, FLAG_DYNAMIC);
+	SET_FLAG(self->flags, FLAG_MUTEX_INIT);
 	return self;
 }
 
 /*
- * str_free - Free a dynamic string object.
+ * _str_free - Free a dynamic string object.
  *
  * Releases the internal data buffer, destroys the mutex, and frees the object.
  *
  * Parameters:
  *   self - Pointer to the string object to be freed.
  */
-STR_NONNULL_ALL void str_free(str *self) {
-    if (!self)
-        return;
+void _str_free(struct str **self) {
+	if (!self || !(*self)) {
+        	return;
+	}
     
-    if (self->data) {
-        free(self->data);
-        self->data = NULL;
-    }
-    
-    pthread_mutex_destroy(&self->lock);
-    free(self);
+	if ((*self)->data) {
+		free((*self)->data);
+		(*self)->data = NULL;
+	}
+
+	if (CHECK_FLAG((*self)->flags, FLAG_MUTEX_INIT)) {
+		pthread_mutex_destroy(&(*self)->lock);
+	}
+
+	if (CHECK_FLAG((*self)->flags, FLAG_DYNAMIC)) {
+		free(*self);
+		*self = NULL;
+	}
 }
 
 /*
@@ -117,7 +124,7 @@ STR_NONNULL_ALL void str_free(str *self) {
  * Parameters:
  *   self - Pointer to the string object to be cleared.
  */
-STR_NONNULL_ALL void str_clear(str *self) {
+void str_clear(struct str *self) {
 	if (self) {
 		if(self->data) {
 			memset(self->data, 0, self->capacity);
@@ -139,30 +146,32 @@ STR_NONNULL_ALL void str_clear(str *self) {
  * Returns:
  *   STR_OK on success or an appropriate error code on failure.
  */
-STR_NONNULL_ALL Str_err_t str_grow(str *self, size_t min_capacity) {
-    if (!self)
-        return STR_NULL;
-    
-    if (min_capacity > STR_MAX_STRING_SIZE)
-        return STR_OVERFLOW;
-    
-    size_t new_capacity = (self->capacity == 0) ? MIN_CAPACITY : self->capacity;
-    while (new_capacity < min_capacity) {
-        new_capacity *= 2;
-        /* Check for overflow */
-        if (new_capacity > STR_MAX_STRING_SIZE) {
-            new_capacity = STR_MAX_STRING_SIZE;
-            break;
-        }
-    }
-    
-    char *new_data = (char *)realloc(self->data, new_capacity);
-    if (!new_data)
-        return STR_NOMEM;
-    
-    self->data = new_data;
-    self->capacity = new_capacity;
-    return STR_OK;
+Str_err_t str_grow(struct str *self, size_t min_capacity) {
+	if (!self)
+		return STR_NULL;
+
+	if (min_capacity >= STR_MAX_STRING_SIZE)
+		return STR_OVERFLOW;
+
+	size_t new_capacity = (self->capacity == 0) ? MIN_CAPACITY : self->capacity;
+	while (new_capacity < min_capacity)
+	{
+		new_capacity *= 2;
+		/* Check for overflow */
+		if (new_capacity >= STR_MAX_STRING_SIZE)
+		{
+			new_capacity = STR_MAX_STRING_SIZE;
+			break;
+		}
+	}
+
+	char *new_data = (char *)realloc(self->data, new_capacity);
+	if (!new_data)
+		return STR_NOMEM;
+
+	self->data = new_data;
+	self->capacity = new_capacity;
+	return STR_OK;
 }
 
 /*
@@ -178,30 +187,33 @@ STR_NONNULL_ALL Str_err_t str_grow(str *self, size_t min_capacity) {
  * Returns:
  *   STR_OK on success or an error code if an error occurs.
  */
-STR_NONNULL_ALL Str_err_t str_set(str *self, const char *arr) {
-	if (!self)
+Str_err_t str_set(struct str *self, const char *arr) {
+	if (!self || !arr)
 		return STR_NULL;
-	if (!arr)
-		return STR_NULL;
-	
+		
 	if (pthread_mutex_lock(&self->lock) != 0)
 		return STR_LOCK;
 	
 	size_t arr_size = strlen(arr) + 1;
-	
-	if (self->capacity < arr_size) {
-		Str_err_t err = str_realloc(self, arr_size);
-		if (err != STR_OK) {
-			pthread_mutex_unlock(&self->lock);
-			return err;
-		}
-	}
-	
-	char *result = str_copy(self->data, arr, arr_size);
-	if (!result) {
+	if (arr_size > STR_MAX_STRING_SIZE) {
 		pthread_mutex_unlock(&self->lock);
-		return STR_ERRCPY;
+		return STR_INVALID;
 	}
+
+	size_t needed = arr_size < MIN_CAPACITY ? MIN_CAPACITY : arr_size;
+	
+	if (self->capacity < needed) {
+		char *new_data = realloc(self->data, needed);
+		if (!new_data) {
+		pthread_mutex_unlock(&self->lock);
+		return STR_NOMEM;
+		}
+		self->data = new_data;
+		self->capacity = needed;
+	}
+	
+	memcpy(self->data, arr, arr_size - 1);
+	self->data[arr_size - 1] = '\0';
 	self->length = arr_size - 1;
 	
 	pthread_mutex_unlock(&self->lock);
@@ -220,7 +232,7 @@ STR_NONNULL_ALL Str_err_t str_set(str *self, const char *arr) {
  * Returns:
  *   STR_OK on success or an appropriate error code on failure.
  */
-STR_NONNULL_ALL Str_err_t str_add(str *self, const char *_data) {
+Str_err_t str_add(struct str *self, const char *_data) {
 	if (!self || !_data)
 		return STR_NULL;
 	
@@ -246,23 +258,6 @@ STR_NONNULL_ALL Str_err_t str_add(str *self, const char *_data) {
 	return STR_OK;
 }
 
-/*
- * str_get - Retrieve the internal C-string.
- *
- * Returns the pointer to the internal data buffer.
- *
- * Parameters:
- *   self - Pointer to the string object.
- *
- * Returns:
- *   The internal C-string, or NULL if not available.
- */
-STR_NONNULL_ALL STR_PURE const char* str_get(const str *self) {
-	if (!self || !self->data)
-		return NULL;
-
-	return self->data;
-}
 
 /*
  * str_get_data - Alias for str_get.
@@ -275,7 +270,7 @@ STR_NONNULL_ALL STR_PURE const char* str_get(const str *self) {
  * Returns:
  *   The internal C-string, or NULL if not available.
  */
-STR_NONNULL_ALL STR_PURE const char* str_get_data(const str *self) {
+const char* str_get_data(const struct str *self) {
 	if (!self || !self->data)
 		return NULL;
 
@@ -291,11 +286,27 @@ STR_NONNULL_ALL STR_PURE const char* str_get_data(const str *self) {
  * Returns:
  *   The length of the string, or 0 if self is NULL.
  */
-STR_NONNULL_ALL STR_PURE size_t str_get_size(const str *self) {
+size_t str_get_size(const struct str *self) {
 	if (!self)
 		return 0;
 
 	return self->length;
+}
+
+/*
+ * str_get_capacity - Get the current capacity of the string.
+ *
+ * Parameters:
+ *   self - Pointer to the string object.
+ *
+ * Returns:
+ *   The capacity of the string, or 0 if self is NULL.
+ */
+size_t str_get_capacity(const struct str *self) {
+	if (!self)
+		return 0;
+
+	return self->capacity;
 }
 
 /*
@@ -307,7 +318,7 @@ STR_NONNULL_ALL STR_PURE size_t str_get_size(const str *self) {
  * Returns:
  *   true if the string is empty, false otherwise.
  */
-STR_NONNULL_ALL STR_PURE bool str_is_empty(const str *self) {
+bool str_is_empty(const struct str *self) {
 	if (!self)
 		return true;
 
@@ -326,7 +337,7 @@ STR_NONNULL_ALL STR_PURE bool str_is_empty(const str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_to_upper(str *self) {
+Str_err_t str_to_upper(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -352,7 +363,7 @@ STR_NONNULL_ALL Str_err_t str_to_upper(str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_to_lower(str *self) {
+Str_err_t str_to_lower(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -379,7 +390,7 @@ STR_NONNULL_ALL Str_err_t str_to_lower(str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_to_title_case(str *self) {
+Str_err_t str_to_title_case(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -414,7 +425,7 @@ STR_NONNULL_ALL Str_err_t str_to_title_case(str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_reverse(str *self) {
+Str_err_t str_reverse(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -444,7 +455,7 @@ STR_NONNULL_ALL Str_err_t str_reverse(str *self) {
  * Returns:
  *   STR_OK on success, STR_FAIL if the substring is not found, or an error code.
  */
-STR_NONNULL_ALL Str_err_t str_rem_word(str *self, const char *needle) {
+Str_err_t str_rem_word(struct str *self, const char *needle) {
 	if (!self || !self->data || !needle)
 		return STR_NULL;
 	
@@ -479,7 +490,7 @@ STR_NONNULL_ALL Str_err_t str_rem_word(str *self, const char *needle) {
  * Returns:
  *   STR_OK on success, STR_FAIL if 'old_word' is not found, or an error code.
  */
-STR_NONNULL_ALL Str_err_t str_swap_word(str *self, const char *old_word, const char *new_word) {
+Str_err_t str_swap_word(struct str *self, const char *old_word, const char *new_word) {
 	if (!self || !self->data || !old_word || !new_word)
 		return STR_NULL;
 	
@@ -528,12 +539,12 @@ STR_NONNULL_ALL Str_err_t str_swap_word(str *self, const char *old_word, const c
  * Returns:
  *   STR_OK on success or an error code if reading or setting the input fails.
  */
-STR_NONNULL_ALL Str_err_t str_input(str *self) {
+Str_err_t str_input(struct str *self, FILE *stream) {
 	if (!self)
 		return STR_NULL;
 	
 	char buffer[CHUNK_SIZE];
-	if (!fgets(buffer, sizeof(buffer), stdin))
+	if (!fgets(buffer, sizeof(buffer), stream))
 		return STR_FAIL;
 	
 	size_t len = strlen(buffer);
@@ -555,20 +566,54 @@ STR_NONNULL_ALL Str_err_t str_input(str *self) {
  * Returns:
  *   STR_OK on success or an error code if reading or appending fails.
  */
-STR_NONNULL_ALL Str_err_t str_add_input(str *self) {
+Str_err_t str_add_input(struct str *self, FILE *stream) {
 	if (!self)
 		return STR_NULL;
 	
+	if (pthread_mutex_lock(&self->lock) != 0)
+		return STR_LOCK;
+    
 	char buffer[CHUNK_SIZE];
-	if (!fgets(buffer, sizeof(buffer), stdin))
-		return STR_FAIL;
-	
-	size_t len = strlen(buffer);
-	if (len > 0 && buffer[len-1] == '\n')
-		buffer[--len] = '\0';
-	
-	return str_add(self, buffer);
+	char *input = NULL;
+	size_t total_len = 0;
+	Str_err_t final_err = STR_OK;
+    
+	while (fgets(buffer, sizeof(buffer), stream)) {
+		size_t len = strlen(buffer);
+		
+		if (total_len + len + 1 > STR_MAX_STRING_SIZE) {
+			final_err = STR_OVERFLOW;
+			goto cleanup;
+		}
+		
+		char *tmp = realloc(input, total_len + len + 1);
+		if (!tmp) {
+			final_err = STR_NOMEM;
+			goto cleanup;
+		}
+		
+		input = tmp;
+		memcpy(input + total_len, buffer, len);
+		total_len += len;
+		input[total_len] = '\0';
+	}
+    
+	if (ferror(stream)) {
+		final_err = STR_STREAM;
+		goto cleanup;
+	}
+    
+	// Veri varsa ekle
+	if (input != NULL) {
+		final_err = str_add(self, input);
+	}
+    
+    cleanup:
+	free(input);
+	pthread_mutex_unlock(&self->lock);
+	return final_err;
 }
+
 
 /*
  * str_print - Print the string to stdout.
@@ -576,7 +621,7 @@ STR_NONNULL_ALL Str_err_t str_add_input(str *self) {
  * Parameters:
  *   self - Pointer to the string object.
  */
-STR_NONNULL_ALL void str_print(const str *self) {
+void str_print(const struct str *self) {
 	if (!self || !self->data)
 		return;
 
@@ -596,7 +641,7 @@ STR_NONNULL_ALL void str_print(const str *self) {
  * Returns:
  *   Always returns 0.
  */
-STR_NONNULL_ALL int str_check_err(Str_err_t Error, const char *user_message) {
+int str_check_err(Str_err_t Error, const char *user_message) {
 	static const char *err_msgs[] = {
 	[STR_OK]	  = "OK",
 	[STR_NULL]	= "NULL pointer",
@@ -624,63 +669,6 @@ STR_NONNULL_ALL int str_check_err(Str_err_t Error, const char *user_message) {
 	return 0;
 }
 
-/*
- * str_substr - Extract a substring from the string.
- *
- * Extracts 'len' characters from the string starting at position 'pos' and
- * stores the result in the provided 'result' string object. The original string
- * is locked during extraction.
- *
- * Parameters:
- *   self   - Pointer to the source string object.
- *   result - Pointer to the string object where the substring will be stored.
- *   pos    - Starting position for the substring.
- *   len    - Number of characters to extract.
- *
- * Returns:
- *   STR_OK on success or an appropriate error code.
- */
-STR_NONNULL_ALL Str_err_t str_substr(str *self, str *result, size_t pos, size_t len) {
-    if (!self || !result || !self->data)
-        return STR_NULL;
-
-    if (pos >= self->length)
-        return STR_INVALID;
-
-    Str_err_t err = str_lock(self);
-    if (err != STR_OK) {
-        return err;
-    }
-
-    if (len > self->length - pos)
-        len = self->length - pos;
-
-    /* Clear the result string object */
-    str_clear(result);
-
-    char *substr = (char*)malloc(len + 1);
-    if (!substr) {
-        str_unlock(self);
-        return STR_NOMEM;
-    }
-
-    memcpy(substr, self->data + pos, len);
-    substr[len] = '\0';
-
-    /* Assign the new value to the result object */
-    char *old_data = result->data;
-    result->data = substr;
-    result->length = len;
-    result->capacity = len + 1;
-
-    /* Free the old content */
-    if (old_data) {
-        free(old_data);
-    }
-
-    str_unlock(self);
-    return STR_OK;
-}
 
 /*
  * str_insert - Insert a string into the current string at a given position.
@@ -696,7 +684,7 @@ STR_NONNULL_ALL Str_err_t str_substr(str *self, str *result, size_t pos, size_t 
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-STR_NONNULL_ALL Str_err_t str_insert(str *self, size_t pos, const char *string) {
+Str_err_t str_insert(struct str *self, size_t pos, const char *string) {
 	if (!self || !string)
 		return STR_NULL;
 	
@@ -742,7 +730,7 @@ STR_NONNULL_ALL Str_err_t str_insert(str *self, size_t pos, const char *string) 
  * Returns:
  *   The index of the found substring or (size_t)-1 if not found.
  */
-STR_NONNULL_ALL size_t str_find(const str *self, const char *substr, size_t pos) {
+size_t str_find(const struct str *self, const char *substr, size_t pos) {
 	if (!self || !substr || !self->data)
 		return (size_t)-1;
 	
@@ -773,7 +761,7 @@ STR_NONNULL_ALL size_t str_find(const str *self, const char *substr, size_t pos)
  * Returns:
  *   true if the string starts with 'prefix', false otherwise.
  */
-STR_NONNULL_ALL bool str_starts_with(const str *self, const char *prefix) {
+bool str_starts_with(const struct str *self, const char *prefix) {
 	if (!self || !prefix || !self->data)
 		return false;
 	
@@ -794,7 +782,7 @@ STR_NONNULL_ALL bool str_starts_with(const str *self, const char *prefix) {
  * Returns:
  *   true if the string ends with 'suffix', false otherwise.
  */
-STR_NONNULL_ALL bool str_ends_with(const str *self, const char *suffix) {
+bool str_ends_with(const struct str *self, const char *suffix) {
 	if (!self || !suffix || !self->data)
 		return false;
 	
@@ -819,35 +807,35 @@ STR_NONNULL_ALL bool str_ends_with(const str *self, const char *suffix) {
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-STR_NONNULL_ALL Str_err_t str_pad_left(str *self, size_t total_length, char pad_char) {
-    if (!self || !self->data)
-        return STR_NULL;
-    
-    if (pthread_mutex_lock(&self->lock) != 0)
-        return STR_LOCK;
-    
-    if (total_length <= self->length) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_OK;
-    }
-    
-    size_t pad_length = total_length - self->length;
-    char *new_data = (char*)malloc(total_length + 1); /* Allocate new buffer */
-    if (!new_data) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_NOMEM;
-    }
-    
-    memset(new_data, pad_char, pad_length);
-    memcpy(new_data + pad_length, self->data, self->length + 1);
-    
-    free(self->data);
-    self->data = new_data;
-    self->length = total_length;
-    self->capacity = total_length + 1;
-    
-    pthread_mutex_unlock(&self->lock);
-    return STR_OK;
+Str_err_t str_pad_left(struct str *self, size_t total_length, char pad_char) {
+	if (!self || !self->data)
+		return STR_NULL;
+	
+	if (pthread_mutex_lock(&self->lock) != 0)
+		return STR_LOCK;
+	
+	if (total_length <= self->length) {
+		pthread_mutex_unlock(&self->lock);
+		return STR_OK;
+	}
+	
+	size_t pad_length = total_length - self->length;
+	char *new_data = (char*)malloc(total_length + 1); /* Allocate new buffer */
+	if (!new_data) {
+		pthread_mutex_unlock(&self->lock);
+		return STR_NOMEM;
+	}
+	
+	memset(new_data, pad_char, pad_length);
+	memcpy(new_data + pad_length, self->data, self->length + 1);
+	
+	free(self->data);
+	self->data = new_data;
+	self->length = total_length;
+	self->capacity = total_length + 1;
+	
+	pthread_mutex_unlock(&self->lock);
+	return STR_OK;
 }
 
 /*
@@ -864,36 +852,36 @@ STR_NONNULL_ALL Str_err_t str_pad_left(str *self, size_t total_length, char pad_
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-STR_NONNULL_ALL Str_err_t str_pad_right(str *self, size_t total_length, char pad_char) {
-    if (!self || !self->data)
-        return STR_NULL;
-    
-    if (pthread_mutex_lock(&self->lock) != 0)
-        return STR_LOCK;
-    
-    if (total_length <= self->length) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_OK;
-    }
-    
-    size_t pad_length = total_length - self->length;
-    char *new_data = (char*)malloc(total_length + 1); /* Allocate new buffer */
-    if (!new_data) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_NOMEM;
-    }
-    
-    memcpy(new_data, self->data, self->length);
-    memset(new_data + self->length, pad_char, pad_length);
-    new_data[total_length] = '\0';
-    
-    free(self->data);
-    self->data = new_data;
-    self->length = total_length;
-    self->capacity = total_length + 1;
-    
-    pthread_mutex_unlock(&self->lock);
-    return STR_OK;
+Str_err_t str_pad_right(struct str *self, size_t total_length, char pad_char) {
+	if (!self || !self->data)
+		return STR_NULL;
+	
+	if (pthread_mutex_lock(&self->lock) != 0)
+		return STR_LOCK;
+	
+	if (total_length <= self->length) {
+		pthread_mutex_unlock(&self->lock);
+		return STR_OK;
+	}
+	
+	size_t pad_length = total_length - self->length;
+	char *new_data = (char*)malloc(total_length + 1); /* Allocate new buffer */
+	if (!new_data) {
+		pthread_mutex_unlock(&self->lock);
+		return STR_NOMEM;
+	}
+	
+	memcpy(new_data, self->data, self->length);
+	memset(new_data + self->length, pad_char, pad_length);
+	new_data[total_length] = '\0';
+	
+	free(self->data);
+	self->data = new_data;
+	self->length = total_length;
+	self->capacity = total_length + 1;
+	
+	pthread_mutex_unlock(&self->lock);
+	return STR_OK;
 }
 
 /*
@@ -908,7 +896,7 @@ STR_NONNULL_ALL Str_err_t str_pad_right(str *self, size_t total_length, char pad
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_trim(str *self) {
+Str_err_t str_trim(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -916,33 +904,13 @@ STR_NONNULL_ALL Str_err_t str_trim(str *self) {
 		return STR_LOCK;
 	
 	/* Trim left */
-	size_t start = 0;
-	while (start < self->length && isspace(self->data[start]))
-		start++;
+	Str_err_t err = str_trim_left(self);
+	if (err != STR_OK)
+		return err;
 	
-	if (start == self->length) {
-		/* String contains only whitespace */
-		self->data[0] = '\0';
-		self->length = 0;
-		pthread_mutex_unlock(&self->lock);
-		return STR_OK;
-	}
-	
-	/* Trim right */
-	size_t end = self->length - 1;
-	while (end > start && isspace(self->data[end]))
-		end--;
-	
-	/* Move the trimmed string to the beginning if necessary */
-	if (start > 0) {
-		size_t new_len = end - start + 1;
-		memmove(self->data, self->data + start, new_len);
-		self->data[new_len] = '\0';
-		self->length = new_len;
-	} else {
-		self->data[end + 1] = '\0';
-		self->length = end + 1;
-	}
+	err = str_trim_right(self);
+	if (err != STR_OK)
+		return err;
 	
 	pthread_mutex_unlock(&self->lock);
 	return STR_OK;
@@ -959,7 +927,7 @@ STR_NONNULL_ALL Str_err_t str_trim(str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_trim_left(str *self) {
+Str_err_t str_trim_left(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 	
@@ -990,7 +958,7 @@ STR_NONNULL_ALL Str_err_t str_trim_left(str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-STR_NONNULL_ALL Str_err_t str_trim_right(str *self) {
+Str_err_t str_trim_right(struct str *self) {
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -1018,17 +986,40 @@ STR_NONNULL_ALL Str_err_t str_trim_right(str *self) {
  * Returns:
  *   The destination buffer, or NULL if input is invalid.
  */
-STR_NONNULL_ALL char* str_copy(char *dest, const char *source, size_t max_len) {
-	if (!dest || !source || max_len == 0)
-		return NULL;
-	
-	size_t i;
-	for (i = 0; i < max_len - 1 && source[i] != '\0'; i++)
-		dest[i] = source[i];
+Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len) {
+    if (!dest || !source || !source->data)
+        return STR_NULL;
+    
+    if (pthread_mutex_lock(&dest->lock) != 0)
+        return STR_LOCK;
 
-	dest[i] = '\0';
-	
-	return dest;
+    if (!dest->data) {
+        dest->data = (char *)malloc(MIN_CAPACITY);
+        if (!dest->data) {
+            pthread_mutex_unlock(&dest->lock);
+            return STR_NOMEM;
+        }
+        dest->capacity = MIN_CAPACITY;
+    }
+    
+    size_t source_len = strlen(source->data);
+    size_t copy_len = (source_len < max_len) ? source_len : max_len;
+ 
+    if (dest->capacity <= copy_len) {
+        Str_err_t err = str_grow(dest, copy_len + 1);
+        if (err != STR_OK) {
+            pthread_mutex_unlock(&dest->lock);
+            return err;
+        }
+    }
+    
+    memcpy(dest->data, source->data, copy_len);
+    dest->data[copy_len] = '\0';
+    dest->length = copy_len;
+    
+    pthread_mutex_unlock(&dest->lock);
+    
+    return STR_OK;
 }
 
 /*
@@ -1043,39 +1034,23 @@ STR_NONNULL_ALL char* str_copy(char *dest, const char *source, size_t max_len) {
  * Returns:
  *   Pointer to the newly allocated string object or NULL on failure.
  */
-STR_WARN_UNUSED_RESULT STR_MALLOC str* str_alloc(size_t size) {
-    if (size == 0 || size > STR_MAX_STRING_SIZE)
-        return NULL;
+struct str *str_alloc(size_t size) {
+	if (size == 0 || size > STR_MAX_STRING_SIZE)
+		return NULL;
     
-    str* tmp = (str*)malloc(sizeof(str));
-    if (!tmp)
-        return NULL;
-    
-    memset(tmp, 0, sizeof(str));
-    
-    tmp->data = (char*)calloc(size, sizeof(char));
-    if (!tmp->data) {
-        free(tmp);
-        return NULL;
-    }
-    
-    /* Initialize mutex attribute */
-    Str_err_t emutex = init_mutex_attr();
-    if (emutex != STR_OK) {
-        free(tmp->data);
-        free(tmp);
-        return NULL;
-    }
-    
-    if (pthread_mutex_init(&tmp->lock, &mutex_attr) != 0) {
-        free(tmp->data);
-        free(tmp);
-        return NULL;
-    }
-    
-    tmp->capacity = size;
-    tmp->is_dynamic = true;
-    return tmp;
+	struct str *tmp = str_init();
+	if (!tmp)
+		return NULL;
+
+	tmp->data = (char*)calloc(size, sizeof(char));
+	if (!tmp->data) {
+		pthread_mutex_destroy(&tmp->lock);
+		free(tmp);
+		return NULL;
+	}
+
+	tmp->capacity = size;
+	return tmp;
 }
 
 /*
@@ -1091,35 +1066,43 @@ STR_WARN_UNUSED_RESULT STR_MALLOC str* str_alloc(size_t size) {
  * Returns:
  *   STR_OK on success or an error code if reallocation fails.
  */
-STR_WARN_UNUSED_RESULT Str_err_t str_realloc(str *self, size_t new_size) {
-    if (!self)
-        return STR_INVALID;
+Str_err_t str_realloc(struct str *self, size_t new_size) {
+	if (!self)
+		return STR_INVALID;
     
-    if (new_size == 0) {
-        free(self->data);
-        self->data = NULL;
-        self->capacity = 0;
-        self->length = 0;
-        return STR_OK;
-    }
+	if (new_size == 0) {
+		if (self->data) {
+        		free(self->data);
+			self->data = NULL;
+		}
+
+		if (CHECK_FLAG(self->flags, FLAG_MUTEX_INIT)) {
+			pthread_mutex_destroy(&self->lock);
+		}
+
+		if (CHECK_FLAG(self->flags, FLAG_DYNAMIC)) {
+			free(self);
+			self = NULL;
+		}
+	}
     
-    if (new_size > STR_MAX_STRING_SIZE)
-        return STR_OVERFLOW;
+	if (new_size > STR_MAX_STRING_SIZE)
+		return STR_OVERFLOW;
     
-    char *new_ptr = (char *)realloc(self->data, new_size);
-    if (!new_ptr)
-        return STR_NOMEM;
+	char *new_ptr = (char *)realloc(self->data, new_size);
+	if (!new_ptr)
+		return STR_NOMEM;
     
-    self->data = new_ptr;
-    self->capacity = new_size;
+	self->data = new_ptr;
+	self->capacity = new_size;
     
-    /* Adjust length if new capacity is less than current length */
-    if (self->length >= new_size) {
-        self->length = new_size - 1;
-        self->data[self->length] = '\0';
-    }
-    
-    return STR_OK;
+	/* Adjust length if new capacity is less than current length */
+	if (self->length >= new_size) {
+		self->length = new_size - 1;
+        	self->data[self->length] = '\0';
+    	}
+
+	return STR_OK;
 }
 
 /*
@@ -1134,29 +1117,42 @@ STR_WARN_UNUSED_RESULT Str_err_t str_realloc(str *self, size_t new_size) {
  * Returns:
  *   Pointer to the dynamically allocated input string, or NULL on error.
  */
-STR_NONNULL_ALL char* get_dyn_input(size_t max_str_size) {
-    if (max_str_size == 0 || max_str_size > STR_MAX_STRING_SIZE)
-        return NULL;
-    
-    char *buffer = (char*)malloc(CHUNK_SIZE);
-    if (!buffer)
-        return NULL;
-    
-    size_t total_read = 0;
-    while (fgets(buffer + total_read, CHUNK_SIZE, stdin)) {
-        total_read += strlen(buffer + total_read);
-        if (buffer[total_read - 1] == '\n') {
-            buffer[total_read - 1] = '\0';
-            break;
-        }
-        
-        char *new_buffer = (char *)realloc(buffer, total_read + CHUNK_SIZE);
-        if (!new_buffer) {
-            free(buffer);
-            return NULL;
-        }
-        buffer = new_buffer;
-    }
-    
-    return buffer;
+char* get_dyn_input(size_t max_str_size) {
+	if (max_str_size == 0 || max_str_size > STR_MAX_STRING_SIZE)
+		return NULL;
+	
+	char *buffer = (char*)malloc(CHUNK_SIZE);
+	if (!buffer)
+		return NULL;
+	
+	size_t total_read = 0;
+	while (fgets(buffer + total_read, CHUNK_SIZE, stdin)) {
+		total_read += strlen(buffer + total_read);
+		if (buffer[total_read - 1] == '\n') {
+		buffer[total_read - 1] = '\0';
+		break;
+		}
+		
+		char *new_buffer = (char *)realloc(buffer, total_read + CHUNK_SIZE);
+		if (!new_buffer) {
+		free(buffer);
+		return NULL;
+		}
+		buffer = new_buffer;
+	}
+	return buffer;
 }
+
+
+
+/* UNDEF SPACE*/
+#undef CHUNK_SIZE
+#undef MIN_CAPACITY
+
+
+#undef FLAG_DYNAMIC
+#undef FLAG_MUTEX_INIT
+
+#undef SET_FLAG
+#undef CLEAR_FLAG
+#undef CHECK_FLAG
