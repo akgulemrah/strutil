@@ -25,7 +25,7 @@ Simply include the header file in your project:
 Compile with threading support:
 
 ```bash
-gcc -o your_program your_program.c -pthread
+gcc ... -pthread
 ```
 
 ## 🎯 Quick Start
@@ -52,32 +52,34 @@ int main() {
 }
 ```
 
+See the `example` folder for more example code.
+
 ## 📚 API Reference
 
 ### Core Functions
-- `str_init()`: Initialize new string structure
-- `str_free()`: Clean up resources
-- `str_clear()`: Clear string content
+- `str_init()`     : Initialize new string structure
+- `str_free()`     : Clean up resources
+- `str_clear()`    : Clear string content
 
 ### String Operations
-- `str_set()`: Set string content
-- `str_get()`: Get string content
-- `str_add()`: Append string
-- `str_get_size()`: Get string length
-- `str_is_empty()`: Check if empty
+- `str_set()`      : Set string content
+- `str_get_data()` : Get string content
+- `str_add()`      : Append string
+- `str_get_size()` : Get string length
+- `str_is_empty()` : Check if empty
 
 ### String Manipulation
-- `str_to_upper()`: Convert to uppercase
-- `str_to_lower()`: Convert to lowercase
-- `str_to_title_case()`: Capitalize words
-- `str_reverse()`: Reverse string
-- `str_rem_word()`: Remove word
-- `str_swap_word()`: Replace word
+- `str_to_upper()`      : Convert to uppercase
+- `str_to_lower()`      : Convert to lowercase
+- `str_to_title_case()` : Capitalize words
+- `str_reverse()`       : Reverse string
+- `str_rem_word()`      : Remove word
+- `str_swap_word()`     : Replace word
 
 ### Input/Output
-- `str_input()`: Read from stdin
-- `str_add_input()`: Append from stdin
-- `str_print()`: Write to stdout
+- `str_input(..., stream)`     : Read from stream
+- `str_add_input(..., stream)` : Append from stream
+- `str_print()`                : Write to stdout
 
 ## 🔍 Error Handling
 
@@ -91,20 +93,19 @@ if (result != STR_OK) {
 ```
 
 Common error codes:
-- `STR_OK`: Success
-- `STR_NULL`: NULL pointer error
-- `STR_NOMEM`: Memory allocation failed
-- `STR_INVALID`: Invalid argument
+- `STR_OK`      : Success
+- `STR_NULL`    : NULL pointer error
+- `STR_NOMEM`   : Memory allocation failed
+- `STR_INVALID` : Invalid argument
 - `STR_OVERFLOW`: Buffer overflow prevented
-
-## 🧪 Testing
-
-Run the comprehensive test suite:
-
-```bash
-gcc -o strutil_test strutil_test.c -pthread
-./strutil_test
-```
+- `STR_NOMEM`   : Memory allocation failed
+- `STR_CPY`		: Copy operation failed
+- `STR_MAXSIZE` : Maximum size exceeded
+- `STR_ALLOC`	: Allocation error
+- `STR_EMPTY`	: Empty string
+- `STR_FAIL`    : General failure
+- `STR_LOCK`    : Mutex lock error
+- `STR_STREAM`	: Stream error
 
 ## 📈 Performance
 
@@ -131,9 +132,3 @@ This project is licensed under the Unlicense - see the [LICENSE](LICENSE) file f
 
 **Emrah Akgül**
 - GitHub: [@akgulemrah](https://github.com/akgulemrah)
-
-## 🙏 Acknowledgments
-
-- Inspired by modern string handling requirements
-- Built with security and performance in mind
-- Thoroughly tested in production environments 
