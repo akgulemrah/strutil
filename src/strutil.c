@@ -15,12 +15,14 @@
  * any later version.
  */
 
-#include "strutil.h"
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdbool.h>
+
+#include "strutil.h"
 
 // FLAGS FOR str struct
 #define FLAG_DYNAMIC (1 << 0) // 0000 0001
@@ -50,7 +52,8 @@ struct str {
  * Returns:
  *   Pointer to the new string object on success, or NULL on failure.
  */
-struct str* str_init(void) {
+struct str* str_init(void)
+{
 	pthread_mutexattr_t mutex_attr;
 
 	struct str *self = (struct str *)malloc(sizeof(struct str));
@@ -95,7 +98,8 @@ struct str* str_init(void) {
  * Parameters:
  *   self - Pointer to the string object to be freed.
  */
-void _str_free(struct str **self) {
+void _str_free(struct str **self)
+{
 	if (!self || !(*self)) {
         	return;
 	}
@@ -123,7 +127,8 @@ void _str_free(struct str **self) {
  * Parameters:
  *   self - Pointer to the string object to be cleared.
  */
-void str_clear(struct str *self) {
+void str_clear(struct str *self)
+{
 	if (self) {
 		if(self->data) {
 			memset(self->data, 0, self->capacity);
@@ -145,7 +150,8 @@ void str_clear(struct str *self) {
  * Returns:
  *   STR_OK on success or an appropriate error code on failure.
  */
-Str_err_t str_grow(struct str *self, size_t min_capacity) {
+Str_err_t str_grow(struct str *self, size_t min_capacity)
+{
 	if (!self)
 		return STR_NULL;
 
@@ -199,15 +205,15 @@ Str_err_t str_cpy(struct str *self, const char *arr, size_t max_length)
 	char *buf = NULL;
 
 	if (strlen(arr) < max_length || max_length >= STR_MAX_STRING_SIZE || max_length == 0) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_INVALID;
-    }
+	        pthread_mutex_unlock(&self->lock);
+	        return STR_INVALID;
+	}
 
 	buf = malloc((max_length + 1) * sizeof(char));
 	if (!buf) {
-        pthread_mutex_unlock(&self->lock);
-        return STR_NOMEM;
-    }
+	        pthread_mutex_unlock(&self->lock);
+	        return STR_NOMEM;
+	}
 
 	memcpy(buf, arr, max_length);
 	buf[max_length] = '\0';
@@ -236,7 +242,8 @@ Str_err_t str_cpy(struct str *self, const char *arr, size_t max_length)
  * Returns:
  *   STR_OK on success or an appropriate error code on failure.
  */
-Str_err_t str_add(struct str *self, const char *_data) {
+Str_err_t str_add(struct str *self, const char *_data)
+{
 	if (!self || !_data)
 		return STR_NULL;
 
@@ -274,7 +281,8 @@ Str_err_t str_add(struct str *self, const char *_data) {
  * Returns:
  *   The internal C-string, or NULL if not available.
  */
-const char* str_get_data(const struct str *self) {
+const char* str_get_data(const struct str *self)
+{
 	if (!self || !self->data)
 		return NULL;
 
@@ -290,7 +298,8 @@ const char* str_get_data(const struct str *self) {
  * Returns:
  *   The length of the string, or 0 if self is NULL.
  */
-size_t str_get_size(const struct str *self) {
+size_t str_get_size(const struct str *self)
+{
 	if (!self)
 		return 0;
 
@@ -306,7 +315,8 @@ size_t str_get_size(const struct str *self) {
  * Returns:
  *   The capacity of the string, or 0 if self is NULL.
  */
-size_t str_get_capacity(const struct str *self) {
+size_t str_get_capacity(const struct str *self)
+{
 	if (!self)
 		return 0;
 
@@ -322,7 +332,8 @@ size_t str_get_capacity(const struct str *self) {
  * Returns:
  *   true if the string is empty, false otherwise.
  */
-bool str_is_empty(const struct str *self) {
+bool str_is_empty(const struct str *self)
+{
 	if (!self)
 		return true;
 
@@ -341,7 +352,8 @@ bool str_is_empty(const struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_to_upper(struct str *self) {
+Str_err_t str_to_upper(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -367,7 +379,8 @@ Str_err_t str_to_upper(struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_to_lower(struct str *self) {
+Str_err_t str_to_lower(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -394,7 +407,8 @@ Str_err_t str_to_lower(struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_to_title_case(struct str *self) {
+Str_err_t str_to_title_case(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -429,7 +443,8 @@ Str_err_t str_to_title_case(struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_reverse(struct str *self) {
+Str_err_t str_reverse(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -459,7 +474,8 @@ Str_err_t str_reverse(struct str *self) {
  * Returns:
  *   STR_OK on success, STR_FAIL if the substring is not found, or an error code.
  */
-Str_err_t str_rem_word(struct str *self, const char *needle) {
+Str_err_t str_rem_word(struct str *self, const char *needle)
+{
 	if (!self || !self->data || !needle)
 		return STR_NULL;
 
@@ -494,7 +510,8 @@ Str_err_t str_rem_word(struct str *self, const char *needle) {
  * Returns:
  *   STR_OK on success, STR_FAIL if 'old_word' is not found, or an error code.
  */
-Str_err_t str_swap_word(struct str *self, const char *old_word, const char *new_word) {
+Str_err_t str_swap_word(struct str *self, const char *old_word, const char *new_word)
+{
 	if (!self || !self->data || !old_word || !new_word)
 		return STR_NULL;
 
@@ -543,7 +560,8 @@ Str_err_t str_swap_word(struct str *self, const char *old_word, const char *new_
  * Returns:
  *   STR_OK on success or an error code if reading or setting the input fails.
  */
-Str_err_t str_input(struct str *self, FILE *stream) {
+Str_err_t str_input(struct str *self, FILE *stream)
+{
 	if (!self)
 		return STR_NULL;
 
@@ -573,7 +591,8 @@ Str_err_t str_input(struct str *self, FILE *stream) {
  * Returns:
  *   STR_OK on success or an error code if reading or appending fails.
  */
-Str_err_t str_add_input(struct str *self, FILE *stream) {
+Str_err_t str_add_input(struct str *self, FILE *stream)
+{
 	if (!self || !stream) {
 #if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
 		fprintf(stderr, "Error: Null pointer passed. Line: %d\n", __LINE__);
@@ -653,7 +672,8 @@ cleanup:
  * Parameters:
  *   self - Pointer to the string object.
  */
-void str_print(const struct str *self) {
+void str_print(const struct str *self)
+{
 	if (!self || !self->data)
 		return;
 
@@ -673,7 +693,8 @@ void str_print(const struct str *self) {
  * Returns:
  *   Always returns 0.
  */
-void str_check_err(const Str_err_t err, const char *optional_message) {
+void str_check_err(const Str_err_t err, const char *optional_message)
+{
 	static const char *err_msgs[] = {
 	[STR_OK]	  = "OK",
 	[STR_NULL]	= "NULL pointer",
@@ -714,7 +735,8 @@ void str_check_err(const Str_err_t err, const char *optional_message) {
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-Str_err_t str_insert(struct str *self, const size_t pos, const char *string) {
+Str_err_t str_insert(struct str *self, const size_t pos, const char *string)
+{
 	if (!self || !string)
 		return STR_NULL;
 
@@ -760,7 +782,8 @@ Str_err_t str_insert(struct str *self, const size_t pos, const char *string) {
  * Returns:
  *   The index of the found substring or (size_t)-1 if not found.
  */
-size_t str_find(const struct str *self, const char *substr, size_t pos) {
+size_t str_find(const struct str *self, const char *substr, size_t pos)
+{
 	if (!self || !substr || !self->data)
 		return (size_t)-1;
 
@@ -791,7 +814,8 @@ size_t str_find(const struct str *self, const char *substr, size_t pos) {
  * Returns:
  *   true if the string starts with 'prefix', false otherwise.
  */
-bool str_starts_with(const struct str *self, const char *prefix) {
+bool str_starts_with(const struct str *self, const char *prefix)
+{
 	if (!self || !prefix || !self->data)
 		return false;
 
@@ -812,7 +836,8 @@ bool str_starts_with(const struct str *self, const char *prefix) {
  * Returns:
  *   true if the string ends with 'suffix', false otherwise.
  */
-bool str_ends_with(const struct str *self, const char *suffix) {
+bool str_ends_with(const struct str *self, const char *suffix)
+{
 	if (!self || !suffix || !self->data)
 		return false;
 
@@ -837,7 +862,8 @@ bool str_ends_with(const struct str *self, const char *suffix) {
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-Str_err_t str_pad_left(struct str *self, size_t total_length, char pad_char) {
+Str_err_t str_pad_left(struct str *self, size_t total_length, char pad_char)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -882,7 +908,8 @@ Str_err_t str_pad_left(struct str *self, size_t total_length, char pad_char) {
  * Returns:
  *   STR_OK on success or an error code on failure.
  */
-Str_err_t str_pad_right(struct str *self, size_t total_length, char pad_char) {
+Str_err_t str_pad_right(struct str *self, size_t total_length, char pad_char)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -926,7 +953,8 @@ Str_err_t str_pad_right(struct str *self, size_t total_length, char pad_char) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_trim(struct str *self) {
+Str_err_t str_trim(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -957,7 +985,8 @@ Str_err_t str_trim(struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_trim_left(struct str *self) {
+Str_err_t str_trim_left(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -988,7 +1017,8 @@ Str_err_t str_trim_left(struct str *self) {
  * Returns:
  *   STR_OK on success or an error code if locking fails.
  */
-Str_err_t str_trim_right(struct str *self) {
+Str_err_t str_trim_right(struct str *self)
+{
 	if (!self || !self->data)
 		return STR_NULL;
 
@@ -1016,7 +1046,8 @@ Str_err_t str_trim_right(struct str *self) {
  * Returns:
  *   The destination buffer, or NULL if input is invalid.
  */
-Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len) {
+Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len)
+{
 	if (!dest || !source || !source->data)
 		return STR_NULL;
 
@@ -1065,7 +1096,8 @@ Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len) {
  * Returns:
  *   Pointer to the newly allocated string object or NULL on failure.
  */
-struct str *str_alloc(size_t size) {
+struct str *str_alloc(size_t size)
+{
 	if (size == 0 || size > STR_MAX_STRING_SIZE)
 		return NULL;
 
@@ -1097,7 +1129,8 @@ struct str *str_alloc(size_t size) {
  * Returns:
  *   STR_OK on success or an error code if reallocation fails.
  */
-Str_err_t _str_realloc(struct str **self, const size_t new_size) {
+Str_err_t _str_realloc(struct str **self, const size_t new_size)
+{
 	if (!self || !(*self))
 		return STR_INVALID;
 
@@ -1148,7 +1181,8 @@ Str_err_t _str_realloc(struct str **self, const size_t new_size) {
  * Returns:
  *   Pointer to the dynamically allocated input string, or NULL on error.
  */
-char* get_dyn_input(size_t max_str_size) {
+char* get_dyn_input(size_t max_str_size)
+{
 	if (max_str_size == 0 || max_str_size > STR_MAX_STRING_SIZE)
 		return NULL;
 
@@ -1173,7 +1207,6 @@ char* get_dyn_input(size_t max_str_size) {
 	}
 	return buffer;
 }
-
 
 
 /* UNDEF SPACE*/
