@@ -21,7 +21,7 @@
 /* Debug mode configuration */
 #ifndef STRDEBUGMODE
 	#define STRDEBUGMODE 0
-#endif		
+#endif
 
 #define STR_NPOS ((size_t)-1)
 
@@ -60,8 +60,8 @@ Str_err_t str_grow(struct str *self, size_t min_capacity);
 Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len);
 
 /* String Operations */
-Str_err_t str_add(struct str *self, const char *_data);
-Str_err_t str_set(struct str *self, const char *arr);
+Str_err_t str_add(struct str *self, const char *source);
+Str_err_t str_cpy(struct str *self, const char *source, size_t max_len);
 const char* str_get_data(const struct str *self);
 size_t str_get_size(const struct str *self);
 size_t str_get_capacity(const struct str *self);
