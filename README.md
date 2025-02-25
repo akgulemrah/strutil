@@ -63,7 +63,7 @@ See the `example` folder for more example code.
 
 ### String Operations
 - `str_add()`        : Append string
-- `str_set()`        : Set string content
+- `str_cpy()`        : Copy string content
 - `str_get_data()`   : Get string content
 - `str_get_size()`   : Get string length
 - `str_get_capacity` : Get string capacity
