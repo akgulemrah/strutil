@@ -51,7 +51,7 @@ typedef enum Str_err_t {
 /* Core Functions */
 struct str *str_init(void);
 void _str_free(struct str **self);
- void str_clear(struct str *self);
+void str_clear(struct str *self);
 
 /* Memory Management */
 struct str* str_alloc(size_t size);
