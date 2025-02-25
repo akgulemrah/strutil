@@ -62,11 +62,12 @@ See the `example` folder for more example code.
 - `str_clear()`    : Clear string content
 
 ### String Operations
-- `str_set()`      : Set string content
-- `str_get_data()` : Get string content
-- `str_add()`      : Append string
-- `str_get_size()` : Get string length
-- `str_is_empty()` : Check if empty
+- `str_add()`        : Append string
+- `str_set()`        : Set string content
+- `str_get_data()`   : Get string content
+- `str_get_size()`   : Get string length
+- `str_get_capacity` : Get string capacity
+- `str_is_empty()`   : Check if empty
 
 ### String Manipulation
 - `str_to_upper()`      : Convert to uppercase
@@ -80,6 +81,10 @@ See the `example` folder for more example code.
 - `str_input(..., stream)`     : Read from stream
 - `str_add_input(..., stream)` : Append from stream
 - `str_print()`                : Write to stdout
+- `get_dyn_input`              : Get dynamic input from stdin
+
+### Error
+- `str_check_err`              : Print an error message corresponding to the error code
 
 ## 🔍 Error Handling
 
