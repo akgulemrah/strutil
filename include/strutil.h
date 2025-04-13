@@ -27,6 +27,25 @@
     #define STRDEBUGMODE 0
 #endif
 
+/* String flags enum definition */
+typedef enum StrFlags {
+    STR_FLAG_NONE      = 0,
+    STR_FLAG_DYNAMIC   = (1 << 0),  /* Dynamically allocated string */
+    STR_FLAG_MUTEX_INIT = (1 << 1), /* Mutex is initialized */
+    STR_FLAG_READONLY  = (1 << 2),  /* String is read-only */
+    STR_FLAG_FIXED_SIZE = (1 << 3), /* String has fixed size */
+    STR_FLAG_TEMPORARY = (1 << 4),  /* Temporary string, will be freed soon */
+    STR_FLAG_MODIFIED  = (1 << 5),  /* String has been modified */
+    STR_FLAG_LOCKED    = (1 << 6),  /* String is currently locked */
+    STR_FLAG_ERROR     = (1 << 7)   /* String is in error state */
+} StrFlags;
+
+/* Atomic flag operations */
+#define SET_FLAG(flags, FLG) (__atomic_or_fetch(&(flags), (FLG), __ATOMIC_SEQ_CST))
+#define CLEAR_FLAG(flags, FLG) (__atomic_and_fetch(&(flags), ~(FLG), __ATOMIC_SEQ_CST))
+#define CHECK_FLAG(flags, FLG) (__atomic_load_n(&(flags), __ATOMIC_SEQ_CST) & (FLG))
+#define TOGGLE_FLAG(flags, FLG) (__atomic_xor_fetch(&(flags), (FLG), __ATOMIC_SEQ_CST))
+
 static const size_t STR_MAX_STRING_SIZE = (size_t)(32 << 20); //32MB
 struct str;
 

@@ -6,3 +6,6 @@ target_link_libraries(test_strutil PRIVATE strutil pthread cunit)
 
 # Add a custom target to run the tests
 add_custom_target(run_tests COMMAND test_strutil DEPENDS test_strutil)
+
+# Register the test executable with CTest
+add_test(NAME test_strutil COMMAND test_strutil)

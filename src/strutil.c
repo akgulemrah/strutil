@@ -25,23 +25,15 @@
 
 #include "strutil.h"
 
-// FLAGS FOR str struct
-#define FLAG_DYNAMIC (1 << 0) // 0000 0001
-#define FLAG_MUTEX_INIT (1 << 1) // 0000 0010
-
-#define SET_FLAG(flags, FLG) ((flags) |= (FLG))
-#define CLEAR_FLAG(flags, FLG) (flags &= ~(FLG))
-#define CHECK_FLAG(flags, FLG) (((flags) & (FLG)) != 0)
-
 static const unsigned int CHUNK_SIZE = 4096;	// Page size
 static const unsigned int MIN_CAPACITY = 16;	// Minimum initial capacity
 
 struct str {
-	unsigned int flags : 8;		// bit 0: FLAG_DYNAMIC, bit 1: FLAG_MUTEX_INIT, ...
-	char *data;		        // String data
-	size_t length;		        // Current string length
-	size_t capacity;		// Allocated capacity
-	pthread_mutex_t lock;           // Thread safety mutex
+    unsigned int flags;             // Using full int for atomic operations
+    char *data;                    // String data
+    size_t length;                 // Current string length
+    size_t capacity;               // Allocated capacity
+    pthread_mutex_t lock;          // Thread safety mutex
 };
 
 /*
@@ -101,8 +93,8 @@ struct str* str_init(void)
 
 	pthread_mutexattr_destroy(&mutex_attr);
 
-	SET_FLAG(self->flags, FLAG_DYNAMIC);
-	SET_FLAG(self->flags, FLAG_MUTEX_INIT);
+	SET_FLAG(self->flags, STR_FLAG_DYNAMIC);
+	SET_FLAG(self->flags, STR_FLAG_MUTEX_INIT);
 	return self;
 }
 
@@ -124,11 +116,11 @@ void _str_free(struct str **self)
 		(*self)->data = NULL;
 	}
 
-	if (CHECK_FLAG((*self)->flags, FLAG_MUTEX_INIT)) {
+	if (CHECK_FLAG((*self)->flags, STR_FLAG_MUTEX_INIT)) {
 		pthread_mutex_destroy(&(*self)->lock);
 	}
 
-	if (CHECK_FLAG((*self)->flags, FLAG_DYNAMIC)) {
+	if (CHECK_FLAG((*self)->flags, STR_FLAG_DYNAMIC)) {
 		free(*self);
 		*self = NULL;
 	}
@@ -294,7 +286,7 @@ Str_err_t str_mov(struct str *dest, struct str *src)
 
 	pthread_mutex_unlock(&src->lock);
 	pthread_mutex_destroy(&src->lock);
-	if (CHECK_FLAG(src->flags, FLAG_DYNAMIC))
+	if (CHECK_FLAG(src->flags, STR_FLAG_DYNAMIC))
 		free(src);
 
 	pthread_mutex_unlock(&dest->lock);
@@ -1190,11 +1182,11 @@ Str_err_t _str_realloc(struct str **self, const size_t new_size)
 			(*self)->data = NULL;
 		}
 
-		if (CHECK_FLAG((*self)->flags, FLAG_MUTEX_INIT)) {
+		if (CHECK_FLAG((*self)->flags, STR_FLAG_MUTEX_INIT)) {
 			pthread_mutex_destroy(&(*self)->lock);
 		}
 
-		if (CHECK_FLAG((*self)->flags, FLAG_DYNAMIC)) {
+		if (CHECK_FLAG((*self)->flags, STR_FLAG_DYNAMIC)) {
 			free(*self);
 			*self = NULL;
 		}
@@ -1278,21 +1270,32 @@ Str_err_t str_set(struct str *self, const char *data)
     if (strlen(data) == 0)
         return STR_INVALID;
 
+    if (CHECK_FLAG(self->flags, STR_FLAG_READONLY))
+        return STR_INVALID;
+
     if (pthread_mutex_lock(&self->lock) != 0)
         return STR_LOCK;
 
     size_t new_len = strlen(data);
     
+    if (CHECK_FLAG(self->flags, STR_FLAG_FIXED_SIZE) && new_len >= self->capacity) {
+        pthread_mutex_unlock(&self->lock);
+        return STR_MAXSIZE;
+    }
+    
     if (self->capacity <= new_len) {
-        Str_err_t err = str_grow(self, new_len + 1);
-        if (err != STR_OK) {
-            pthread_mutex_unlock(&self->lock);
-            return err;
+        if (!CHECK_FLAG(self->flags, STR_FLAG_FIXED_SIZE)) {
+            Str_err_t err = str_grow(self, new_len + 1);
+            if (err != STR_OK) {
+                pthread_mutex_unlock(&self->lock);
+                return err;
+            }
         }
     }
 
     strcpy(self->data, data);
     self->length = new_len;
+    SET_FLAG(self->flags, STR_FLAG_MODIFIED);
 
     pthread_mutex_unlock(&self->lock);
     return STR_OK;
