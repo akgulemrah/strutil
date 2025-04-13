@@ -14,6 +14,7 @@
  * Software Foundation; either version 2 of the License, or (at your option)
  * any later version.
  */
+#define _POSIX_C_SOURCE 200809L
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -63,13 +64,27 @@ struct str* str_init(void)
 	}
 
 	memset(self, 0, sizeof(struct str));
+	
+	// Allocate initial data buffer
+	self->data = (char *)malloc(MIN_CAPACITY);
+	if (!self->data) {
+		free(self);
+		fprintf(stderr, "Error: malloc data buffer\n");
+		return NULL;
+	}
+	self->data[0] = '\0';
+	self->capacity = MIN_CAPACITY;
+	self->length = 0;
+
 	if (pthread_mutexattr_init(&mutex_attr) != 0) {
+		free(self->data);
 		free(self);
 		fprintf(stderr, "Error: pthread_mutexattr_init\n");
 		return NULL;
 	}
 
 	if (pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
+		free(self->data);
 		free(self);
 		pthread_mutexattr_destroy(&mutex_attr);
 		fprintf(stderr, "Error: pthread_mutexattr_settype\n");
@@ -78,6 +93,7 @@ struct str* str_init(void)
 
 	if (pthread_mutex_init(&self->lock, &mutex_attr) != 0) {
 		pthread_mutexattr_destroy(&mutex_attr);
+		free(self->data);
 		free(self);
 		fprintf(stderr, "Error: pthread_mutex_init\n");
 		return NULL;
@@ -100,9 +116,8 @@ struct str* str_init(void)
  */
 void _str_free(struct str **self)
 {
-	if (!self || !(*self)) {
+	if (!self || !(*self))
         	return;
-	}
 
 	if ((*self)->data) {
 		free((*self)->data);
@@ -129,11 +144,12 @@ void _str_free(struct str **self)
  */
 void str_clear(struct str *self)
 {
-	if (self) {
-		if(self->data) {
-			memset(self->data, 0, self->capacity);
-			self->length = 0;
-		}
+	if (!self)
+		return;
+
+	if(self->data) {
+		memset(self->data, 0, self->capacity);
+		self->length = 0;
 	}
 }
 
@@ -226,6 +242,62 @@ Str_err_t str_cpy(struct str *self, const char *arr, size_t max_length)
 	self->capacity = self->length + 1;
 
 	pthread_mutex_unlock(&self->lock);
+	return STR_OK;
+}
+
+
+/*
+ * str_mov - Move the content of one string to another.
+ *
+ * Moves the data from 'src' to 'dest' by moving the pointers and updating
+ * the length and capacity. The source string is cleared after the operation.
+ *
+ * Parameters:
+ *   dest - Pointer to the destination string object.
+ *   src  - Pointer to the source string object.
+ *
+ * Returns:
+ *   STR_OK on success or an error code if an error occurs.
+ */
+Str_err_t str_mov(struct str *dest, struct str *src)
+{
+	if (!src)
+		return STR_NULL;
+	
+	if (!dest) {
+		dest = str_init();
+		if (!dest) {
+			return STR_NOMEM;
+		}
+	}
+
+	// lock the dest and src string
+	if (pthread_mutex_lock(&dest->lock) != 0)
+		return STR_LOCK;
+	
+	if (pthread_mutex_lock(&src->lock) != 0) {
+		pthread_mutex_unlock(&dest->lock);
+		return STR_LOCK;
+	}
+
+	if (dest->data)
+		free(dest->data);
+
+	dest->data = src->data;
+	dest->length = src->length;
+	dest->capacity = src->capacity;
+
+	// Clear source data without freeing
+	src->data = NULL;
+	src->length = 0;
+	src->capacity = 0;
+
+	pthread_mutex_unlock(&src->lock);
+	pthread_mutex_destroy(&src->lock);
+	if (CHECK_FLAG(src->flags, FLAG_DYNAMIC))
+		free(src);
+
+	pthread_mutex_unlock(&dest->lock);
 	return STR_OK;
 }
 
@@ -577,13 +649,11 @@ Str_err_t str_input(struct str *self, FILE *stream)
 }
 
 /*
- * str_add_input - Read a line from stdin and append it to the string.
+ * str_add_input - Read a word from stdin and append it to the string.
  *
- * Reads input using fgets into a fixed-size buffer, removes the trailing newline,
- * and appends the result to the existing string content.
- *
- * Note: that the function reads a line from the 'stream' parameter on each call.
- * If you need to read until the end of the file, you should use a loop.
+ * Reads input using fscanf into a fixed-size buffer and appends the result
+ * to the existing string content. Adds a space before the new word if the
+ * string is not empty.
  *
  * Parameters:
  *   self - Pointer to the string object.
@@ -594,71 +664,51 @@ Str_err_t str_input(struct str *self, FILE *stream)
 Str_err_t str_add_input(struct str *self, FILE *stream)
 {
 	if (!self || !stream) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: Null pointer passed. Line: %d\n", __LINE__);
-#endif
 		return STR_NULL;
 	}
 
 	if (pthread_mutex_lock(&self->lock) != 0) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: Mutex lock failed. Line: %d\n", __LINE__);
-#endif
 		return STR_LOCK;
 	}
 
-	char buffer[CHUNK_SIZE] = {0};
-	size_t total_len = 0;
+	char buffer[CHUNK_SIZE];
+	memset(buffer, 0, CHUNK_SIZE);
 	Str_err_t final_err = STR_OK;
 
-	if (fgets(buffer, (int)sizeof(buffer), stream) == NULL) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: fgets failed. Line: %d\n", __LINE__);
-#endif
+	if (fscanf(stream, "%s", buffer) != 1) {
 		final_err = STR_FAIL;
 		goto cleanup;
 	}
 
-	total_len = strlen(buffer);
-
-	if (total_len == 0) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: Empty string. Line: %d\n", __LINE__);
-#endif
+	size_t len = strlen(buffer);
+	if (len == 0) {
 		final_err = STR_EMPTY;
 		goto cleanup;
 	}
 
-	if (total_len >= CHUNK_SIZE) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: Input too long. Line: %d\n", __LINE__);
-#endif
+	if (len >= CHUNK_SIZE) {
 		final_err = STR_OVERFLOW;
 		goto cleanup;
 	}
 
-	if (self->length + total_len >= self->capacity) {
-		final_err = str_grow(self, self->length + total_len + 1);
+	if (self->length + len >= self->capacity) {
+		final_err = str_grow(self, self->length + len + 1);
 		if (final_err != STR_OK) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-			fprintf(stderr, "Error: Failed to grow buffer. Line: %d\n", __LINE__);
-#endif
 			goto cleanup;
 		}
 	}
 
-	final_err = str_add(self, buffer);
-	if (final_err != STR_OK) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: str_add failed. Line: %d\n", __LINE__);
-#endif
+	if (self->length > 0) {
+		// Add a space before the new word if not empty
+		self->data[self->length] = ' ';
+		self->length++;
 	}
+
+	strcpy(self->data + self->length, buffer);
+	self->length += len;
 
 cleanup:
 	if (pthread_mutex_unlock(&self->lock) != 0) {
-#if defined(STRDEBUGMODE) && STRDEBUGMODE == 1
-		fprintf(stderr, "Error: Mutex unlock failed. Line: %d\n", __LINE__);
-#endif
 		return STR_LOCK;
 	}
 
@@ -1208,6 +1258,45 @@ char* get_dyn_input(size_t max_str_size)
 	return buffer;
 }
 
+/*
+ * str_set - Set the string content to a C-string.
+ *
+ * Replaces the current content with a copy of the provided C-string.
+ *
+ * Parameters:
+ *   self - Pointer to the string object.
+ *   data - The null-terminated string to set.
+ *
+ * Returns:
+ *   STR_OK on success or an error code if an error occurs.
+ */
+Str_err_t str_set(struct str *self, const char *data)
+{
+    if (!self || !data)
+        return STR_NULL;
+
+    if (strlen(data) == 0)
+        return STR_INVALID;
+
+    if (pthread_mutex_lock(&self->lock) != 0)
+        return STR_LOCK;
+
+    size_t new_len = strlen(data);
+    
+    if (self->capacity <= new_len) {
+        Str_err_t err = str_grow(self, new_len + 1);
+        if (err != STR_OK) {
+            pthread_mutex_unlock(&self->lock);
+            return err;
+        }
+    }
+
+    strcpy(self->data, data);
+    self->length = new_len;
+
+    pthread_mutex_unlock(&self->lock);
+    return STR_OK;
+}
 
 /* UNDEF SPACE*/
 #undef CHUNK_SIZE

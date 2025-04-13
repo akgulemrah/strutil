@@ -265,18 +265,24 @@ void test_input(void) {
 void test_add_input(void) {
     struct str *s = str_init();
     CU_ASSERT_PTR_NOT_NULL(s);
+    
     FILE *stream = fopen("test_input.txt", "w");
     CU_ASSERT_PTR_NOT_NULL(stream);
     fputs("Hello World\n", stream);
     fflush(stream);
     fclose(stream);
+    
     stream = fopen("test_input.txt", "r");
     CU_ASSERT_PTR_NOT_NULL(stream);
+    
+    // Read first word
     CU_ASSERT(str_add_input(s, stream) == STR_OK);
     CU_ASSERT_STRING_EQUAL(str_get_data(s), "Hello");
+    
+    // Read second word
     CU_ASSERT(str_add_input(s, stream) == STR_OK);
-    printf("veri: %s\n", str_get_data(s));
     CU_ASSERT_STRING_EQUAL(str_get_data(s), "Hello World");
+    
     fclose(stream);
     str_free(s);
     DELETE_FILE("test_input.txt");
@@ -290,7 +296,46 @@ void test_print(void) {
     str_free(s);
 }
 
+void test_to_title_case(void) {
+    struct str *s = str_init();
+    CU_ASSERT_PTR_NOT_NULL(s);
+    CU_ASSERT(str_set(s, "hello world example") == STR_OK);
+    CU_ASSERT(str_to_title_case(s) == STR_OK);
+    CU_ASSERT_STRING_EQUAL(str_get_data(s), "Hello World Example");
+    str_free(s);
+}
 
+void test_str_mov(void) {
+    struct str *s1 = str_init();
+    struct str *s2 = str_init();
+    CU_ASSERT_PTR_NOT_NULL(s1);
+    CU_ASSERT_PTR_NOT_NULL(s2);
+    
+    CU_ASSERT(str_set(s1, "Test String") == STR_OK);
+    CU_ASSERT(str_mov(s2, s1) == STR_OK);
+    CU_ASSERT_STRING_EQUAL(str_get_data(s2), "Test String");
+    str_free(s2);
+}
+
+void test_error_handling(void) {
+    struct str *s = str_init();
+    CU_ASSERT_PTR_NOT_NULL(s);
+    
+    // Test NULL pointer handling
+    CU_ASSERT_EQUAL(str_add(NULL, "test"), STR_NULL);
+    CU_ASSERT_EQUAL(str_add(s, NULL), STR_NULL);
+    
+    // Test empty string
+    CU_ASSERT_EQUAL(str_set(s, ""), STR_INVALID);
+    
+    // Test overflow handling with large allocation
+    CU_ASSERT_EQUAL(str_grow(s, STR_MAX_STRING_SIZE + 1), STR_OVERFLOW);
+    
+    // Test invalid operations
+    CU_ASSERT_EQUAL(str_insert(s, 100, "test"), STR_INVALID); // Position beyond length
+    
+    str_free(s);
+}
 
 int main()
 {
@@ -332,7 +377,10 @@ int main()
 	    !CU_add_test(suite, "test_get_dyn_input", test_get_dyn_input) ||
 	    !CU_add_test(suite, "test_input", test_input) ||
 	    !CU_add_test(suite, "test_add_input", test_add_input) ||
-	    !CU_add_test(suite, "test_print", test_print) ) {
+	    !CU_add_test(suite, "test_to_title_case", test_to_title_case) ||
+	    !CU_add_test(suite, "test_str_mov", test_str_mov) ||
+	    !CU_add_test(suite, "test_error_handling", test_error_handling) ||
+	    !CU_add_test(suite, "test_print", test_print)) {
 		CU_cleanup_registry();
 		return CU_get_error();
 	}

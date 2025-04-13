@@ -17,16 +17,15 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-
-/* Debug mode configuration */
-#ifndef STRDEBUGMODE
-	#define STRDEBUGMODE 0
-#endif
-
 #define STR_NPOS ((size_t)-1)
 
 #define str_free(str_ptr) _str_free(&(str_ptr))
 #define str_realloc(str_ptr, new_size) _str_realloc(&(str_ptr), (new_size))
+
+/* Debug mode configuration */
+#ifndef STRDEBUGMODE
+    #define STRDEBUGMODE 0
+#endif
 
 static const size_t STR_MAX_STRING_SIZE = (size_t)(32 << 20); //32MB
 struct str;
@@ -58,9 +57,11 @@ struct str* str_alloc(size_t size);
 Str_err_t _str_realloc(struct str **self, const size_t new_size);
 Str_err_t str_grow(struct str *self, size_t min_capacity);
 Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len);
+Str_err_t str_mov(struct str *dest, struct str *src);
 
 /* String Operations */
 Str_err_t str_add(struct str *self, const char *source);
+Str_err_t str_set(struct str *self, const char *source);
 Str_err_t str_cpy(struct str *self, const char *source, size_t max_len);
 const char* str_get_data(const struct str *self);
 size_t str_get_size(const struct str *self);
