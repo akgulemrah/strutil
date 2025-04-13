@@ -5,14 +5,6 @@
  * All operations on the string object are protected by a recursive mutex to
  * ensure safe access in multithreaded environments.
  *
- * "Talk is cheap. Show me the code." - Linus Torvalds
- *
- * Copyright (C) 2025  Your Name <your.email@example.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by the Free
- * Software Foundation; either version 2 of the License, or (at your option)
- * any later version.
  */
 #define _POSIX_C_SOURCE 200809L
 
