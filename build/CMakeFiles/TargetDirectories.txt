@@ -1,0 +1,13 @@
+/workspaces/strutil/build/CMakeFiles/rebuild_cache.dir
+/workspaces/strutil/build/CMakeFiles/edit_cache.dir
+/workspaces/strutil/build/CMakeFiles/strutil.dir
+/workspaces/strutil/build/example/CMakeFiles/edit_cache.dir
+/workspaces/strutil/build/example/CMakeFiles/rebuild_cache.dir
+/workspaces/strutil/build/example/CMakeFiles/04_string_manipulation.dir
+/workspaces/strutil/build/example/CMakeFiles/03_io_operations.dir
+/workspaces/strutil/build/example/CMakeFiles/02_thread_safe.dir
+/workspaces/strutil/build/example/CMakeFiles/01_basic_operations.dir
+/workspaces/strutil/build/tests/CMakeFiles/rebuild_cache.dir
+/workspaces/strutil/build/tests/CMakeFiles/run_tests.dir
+/workspaces/strutil/build/tests/CMakeFiles/edit_cache.dir
+/workspaces/strutil/build/tests/CMakeFiles/test_strutil.dir

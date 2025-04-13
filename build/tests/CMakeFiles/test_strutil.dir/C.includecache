@@ -1,0 +1,32 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/strutil.h
+stdio.h
+-
+stdbool.h
+-
+
+/workspaces/strutil/tests/test.c
+CUnit/CUnit.h
+-
+CUnit/Basic.h
+-
+CUnit/Automated.h
+-
+stdio.h
+-
+stdlib.h
+-
+strutil.h
+/workspaces/strutil/tests/strutil.h
+io.h
+-
+unistd.h
+-
+

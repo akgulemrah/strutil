@@ -1,0 +1,146 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						2
+					],
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						5
+					]
+				},
+				{
+					"build" : "example",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "example",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					]
+				},
+				{
+					"build" : "tests",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "tests",
+					"targetIndexes" : 
+					[
+						4,
+						6
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2
+					],
+					"name" : "strutil",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "01_basic_operations::@70983d692f648185febe",
+					"jsonFile" : "target-01_basic_operations-Debug-14f9dab8b23d169d7373.json",
+					"name" : "01_basic_operations",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "02_thread_safe::@70983d692f648185febe",
+					"jsonFile" : "target-02_thread_safe-Debug-43b33df12fe17411a0ad.json",
+					"name" : "02_thread_safe",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "03_io_operations::@70983d692f648185febe",
+					"jsonFile" : "target-03_io_operations-Debug-022262c21b2b6255288d.json",
+					"name" : "03_io_operations",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "04_string_manipulation::@70983d692f648185febe",
+					"jsonFile" : "target-04_string_manipulation-Debug-7e820a91b79dc2907d3f.json",
+					"name" : "04_string_manipulation",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "run_tests::@a44f0ac069e85531cdee",
+					"jsonFile" : "target-run_tests-Debug-2a32aae9241ca992b0c8.json",
+					"name" : "run_tests",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "strutil::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-strutil-Debug-adb851275125dd243d07.json",
+					"name" : "strutil",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "test_strutil::@a44f0ac069e85531cdee",
+					"jsonFile" : "target-test_strutil-Debug-d9b6597fd02ec24385f3.json",
+					"name" : "test_strutil",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/workspaces/strutil/build",
+		"source" : "/workspaces/strutil"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 0
+	}
+}

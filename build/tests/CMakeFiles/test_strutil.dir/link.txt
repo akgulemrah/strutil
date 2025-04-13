@@ -1,0 +1,1 @@
+/usr/bin/gcc -g   CMakeFiles/test_strutil.dir/test.c.o  -o test_strutil  ../libstrutil.a -lpthread -lcunit 

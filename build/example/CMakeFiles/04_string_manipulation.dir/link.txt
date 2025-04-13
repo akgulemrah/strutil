@@ -1,0 +1,1 @@
+/usr/bin/gcc -g   CMakeFiles/04_string_manipulation.dir/04_string_manipulation.c.o  -o 04_string_manipulation  ../libstrutil.a -lpthread 

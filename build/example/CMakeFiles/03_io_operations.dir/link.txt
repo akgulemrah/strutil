@@ -1,0 +1,1 @@
+/usr/bin/gcc -g   CMakeFiles/03_io_operations.dir/03_io_operations.c.o  -o 03_io_operations  ../libstrutil.a -lpthread 
