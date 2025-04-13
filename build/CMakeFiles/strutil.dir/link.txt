@@ -1,2 +1,0 @@
-/usr/bin/ar qc libstrutil.a  CMakeFiles/strutil.dir/src/strutil.c.o
-/usr/bin/ranlib libstrutil.a
