@@ -181,52 +181,38 @@ Str_err_t str_grow(struct str *self, size_t min_capacity)
 
 
 
-/*
- * str_cpy - Copy the string content to the provided C-string.
- *
- * Locks the string object, ensures sufficient capacity, copies the new data,
- * and updates the length.
- *
- * Parameters:
- *   self - Pointer to the string object.
- *   arr  - The null-terminated string to set.
- *
- * Returns:
- *   STR_OK on success or an error code if an error occurs.
- */
 Str_err_t str_cpy(struct str *self, const char *arr, size_t max_length)
 {
-	if (!self || !arr)
-		return STR_NULL;
+    if (!self || !arr)
+        return STR_NULL;
 
-	if (pthread_mutex_lock(&self->lock) != 0)
-		return STR_LOCK;
+    if (max_length >= STR_MAX_STRING_SIZE || max_length == 0)
+        return STR_INVALID;
 
-	char *buf = NULL;
+    if (pthread_mutex_lock(&self->lock) != 0)
+        return STR_LOCK;
 
-	if (strlen(arr) < max_length || max_length >= STR_MAX_STRING_SIZE || max_length == 0) {
-	        pthread_mutex_unlock(&self->lock);
-	        return STR_INVALID;
-	}
+    size_t str_len = strlen(arr);
+    size_t copy_len = (str_len < max_length) ? str_len : max_length;
+    
+    char *buf = malloc((copy_len + 1) * sizeof(char));
+    if (!buf) {
+        pthread_mutex_unlock(&self->lock);
+        return STR_NOMEM;
+    }
 
-	buf = malloc((max_length + 1) * sizeof(char));
-	if (!buf) {
-	        pthread_mutex_unlock(&self->lock);
-	        return STR_NOMEM;
-	}
+    memcpy(buf, arr, copy_len);
+    buf[copy_len] = '\0';
 
-	memcpy(buf, arr, max_length);
-	buf[max_length] = '\0';
+    if (self->data)
+        free(self->data);
 
-	if (self->data)
-		free(self->data);
+    self->data = buf;
+    self->length = copy_len;
+    self->capacity = copy_len + 1;
 
-	self->data = buf;
-	self->length = strlen(self->data);
-	self->capacity = self->length + 1;
-
-	pthread_mutex_unlock(&self->lock);
-	return STR_OK;
+    pthread_mutex_unlock(&self->lock);
+    return STR_OK;
 }
 
 
@@ -975,37 +961,32 @@ Str_err_t str_pad_right(struct str *self, size_t total_length, char pad_char)
 	return STR_OK;
 }
 
-/*
- * str_trim - Trim leading and trailing whitespace from the string.
- *
- * Removes any whitespace characters at the beginning and end of the string.
- * The string object is locked during the operation.
- *
- * Parameters:
- *   self - Pointer to the string object.
- *
- * Returns:
- *   STR_OK on success or an error code if locking fails.
- */
 Str_err_t str_trim(struct str *self)
 {
-	if (!self || !self->data)
-		return STR_NULL;
+    if (!self || !self->data)
+        return STR_NULL;
 
-	if (pthread_mutex_lock(&self->lock) != 0)
-		return STR_LOCK;
+    if (pthread_mutex_lock(&self->lock) != 0)
+        return STR_LOCK;
 
-	/* Trim left */
-	Str_err_t err = str_trim_left(self);
-	if (err != STR_OK)
-		return err;
+    // Trim left - inline implementation
+    size_t start = 0;
+    while (start < self->length && isspace(self->data[start]))
+        start++;
 
-	err = str_trim_right(self);
-	if (err != STR_OK)
-		return err;
+    // Trim right - inline implementation  
+    size_t end = self->length;
+    while (end > start && isspace(self->data[end - 1]))
+        end--;
 
-	pthread_mutex_unlock(&self->lock);
-	return STR_OK;
+    if (start > 0 || end < self->length) {
+        memmove(self->data, self->data + start, end - start);
+        self->length = end - start;
+        self->data[self->length] = '\0';
+    }
+
+    pthread_mutex_unlock(&self->lock);
+    return STR_OK;
 }
 
 /*
