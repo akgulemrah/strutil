@@ -459,6 +459,7 @@ const char* str_get_data(const struct str *self)
 {
     if (!self || !self->data)
         return NULL;
+    
     return self->data;
 }
 
@@ -472,11 +473,17 @@ const char* str_get_data(const struct str *self)
  *   The length of the string, or 0 if self is NULL.
  *   This getter does not acquire a lock. For simple `size_t` reads, this is usually acceptable.
  */
-size_t str_get_size(const struct str *self)
-{
+size_t str_get_size(const struct str *self) {
     if (!self)
         return 0;
-    return self->length;
+    
+    pthread_mutex_t *mutex = (pthread_mutex_t*)&self->lock;
+    if (pthread_mutex_lock(mutex) != 0)
+        return 0;
+    
+    size_t len = self->length;
+    pthread_mutex_unlock(mutex);
+    return len;
 }
 
 /*
@@ -493,6 +500,7 @@ size_t str_get_capacity(const struct str *self)
 {
     if (!self)
         return 0;
+    
     return self->capacity;
 }
 
@@ -923,7 +931,7 @@ void str_check_err(const Str_err_t err, const char *optional_message)
         [STR_NOMEM]     = "No memory (allocation failed)",
         [STR_COPY_FAIL] = "String copy operation failed",
         [STR_MAXSIZE]   = "Max size / fixed size capacity exceeded",
-        [STR_ALLOC]     = "General allocation error",
+        []     = "General allocation error",
         [STR_EMPTY]     = "Empty string or no data to process",
         [STR_FAIL]      = "Operation failed",
         [STR_OVERFLOW]  = "Buffer overflow or size limit exceeded",
@@ -1391,7 +1399,7 @@ Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len)
 
 
 /*
- * str_alloc - Allocate a new string object with an initial buffer size.
+ *  - Allocate a new string object with an initial buffer size.
  *
  * Allocates memory for both the `str` structure and its internal data buffer
  * with a specified initial capacity `size`. Initializes the recursive mutex.
@@ -1402,39 +1410,27 @@ Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len)
  * Returns:
  *   Pointer to the newly allocated string object or NULL on failure.
  */
-struct str *str_alloc(size_t size)
-{
-    // Validate requested size against limits
-    if (size == 0 || size > STR_MAX_STRING_SIZE)
+struct str *str_alloc(size_t size) {
+    if (size == 0 || size > STR_MAX_STRING_SIZE) 
         return NULL;
-
-    // Initialize a base string object; this will allocate `MIN_CAPACITY` by default.
-    struct str *tmp = str_init(); 
-    if (!tmp)
-        return NULL;
-
-    // If the allocated `MIN_CAPACITY` by `str_init` is not the requested `size`,
-    // or if `size` is larger than `MIN_CAPACITY`, reallocate `tmp->data` to the precise `size`.
-    if (tmp->capacity != size) {
-         // Attempt to allocate the precise requested `size` with `calloc` (zero-filled)
-         char *new_data = (char*)calloc(size, sizeof(char));
-         if (!new_data) {
-             // If allocation fails, clean up the `tmp` object (mutex and original data)
-             if (CHECK_FLAG(tmp->flags, STR_FLAG_MUTEX_INIT)) {
-                 pthread_mutex_destroy(&tmp->lock);
-             }
-             free(tmp->data); // Free the existing small buffer from `str_init`
-             free(tmp);
-             return NULL;
-         }
-         
-         free(tmp->data); // Free the old buffer from `str_init`
-         tmp->data = new_data;      // Assign the new buffer
-         tmp->capacity = size;      // Update capacity
-         tmp->length = 0;           // Ensure length is 0 (calloc guarantees null)
-    }
     
-    return tmp; // Return the newly allocated string object
+    struct str *tmp = str_init();
+    if (!tmp) 
+        return NULL;
+    
+    if (tmp->capacity != size) {
+        char *new_data = calloc(size, sizeof(char));
+        if (!new_data) {
+            pthread_mutex_destroy(&tmp->lock); // Destroy mutex
+            free(tmp->data); // Free original buffer
+            free(tmp);       // Free str struct
+            return NULL;
+        }
+        free(tmp->data);
+        tmp->data = new_data;
+        tmp->capacity = size;
+    }
+    return tmp;
 }
 
 /*
