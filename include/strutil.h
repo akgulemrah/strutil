@@ -79,14 +79,14 @@ void str_clear(struct str *self);             // Clears the content of the strin
 struct str* str_alloc(size_t size);           // Allocates a new string object with a specified initial buffer size
 Str_err_t _str_realloc(struct str **self, const size_t new_size); // Internal: reallocates buffer (used by str_realloc macro)
 Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len); // Copies content from one 'str' to another, with a max length
-Str_err_t str_mov(struct str *dest, struct str *src);           // Moves content from 'src' to 'dest', 'src' is consumed
+Str_err_t str_mov(struct str *dest, struct str **src);          // Moves content from 'src' to 'dest', consuming and nullifying 'src'
 
 /* String Operations */
 Str_err_t str_add(struct str *self, const char *source);            // Appends a C-style string to the current string
 Str_err_t str_set(struct str *self, const char *source);            // Sets the string content to a new C-style string (overwrites)
 Str_err_t str_assign_n(struct str *self, const char *source, size_t count); // Assigns a C-style string, copying up to 'count' characters
 
-const char* str_get_data(const struct str *self);   // Returns the internal C-string buffer
+char* str_get_data(const struct str *self);         // Returns a heap-allocated copy of the string's data. The caller is responsible for freeing this memory.
 size_t str_get_size(const struct str *self);        // Returns the current length of the string
 size_t str_get_capacity(const struct str *self);    // Returns the allocated capacity of the string buffer
 bool str_is_empty(const struct str *self);          // Checks if the string is empty

@@ -1,0 +1,13 @@
+/app/build/CMakeFiles/strutil.dir
+/app/build/CMakeFiles/edit_cache.dir
+/app/build/CMakeFiles/rebuild_cache.dir
+/app/build/example/CMakeFiles/01_basic_operations.dir
+/app/build/example/CMakeFiles/02_thread_safe.dir
+/app/build/example/CMakeFiles/03_io_operations.dir
+/app/build/example/CMakeFiles/04_string_manipulation.dir
+/app/build/example/CMakeFiles/edit_cache.dir
+/app/build/example/CMakeFiles/rebuild_cache.dir
+/app/build/tests/CMakeFiles/test_strutil.dir
+/app/build/tests/CMakeFiles/run_tests.dir
+/app/build/tests/CMakeFiles/edit_cache.dir
+/app/build/tests/CMakeFiles/rebuild_cache.dir
