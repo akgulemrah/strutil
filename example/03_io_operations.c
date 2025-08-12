@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "strutil.h"
 
 /*
@@ -32,14 +33,23 @@ int main() {
         return 1;
     }
 
-    printf("\nReading entire file at once:\n");
-    if (str_input(s, fp) != STR_OK) {
-        fprintf(stderr, "Failed to read file\n");
+    printf("\nReading entire file line by line:\n");
+    struct str *line = str_init();
+    if (!line) {
+        fprintf(stderr, "Failed to initialize line string\n");
         fclose(fp);
         str_free(s);
         return 1;
     }
-    printf("File content: %s\n", str_get_data(s));
+    while (str_read_line(line, fp) == STR_OK) {
+        str_add(s, str_get_data(line));
+        str_add(s, "\n");
+    }
+    str_free(line);
+
+    char *data = str_get_data(s);
+    printf("File content:\n%s\n", data);
+    free(data);
     
     // Reset file position and clear string
     rewind(fp);
@@ -47,8 +57,10 @@ int main() {
 
     // Read file word by word
     printf("\nReading file word by word:\n");
-    while (str_add_input(s, fp) == STR_OK) {
-        printf("Read word: %s\n", str_get_data(s));
+    while (str_read_word(s, fp) == STR_OK) {
+        char* word_data = str_get_data(s);
+        printf("Read word: %s\n", word_data);
+        free(word_data);
         str_clear(s);
     }
 

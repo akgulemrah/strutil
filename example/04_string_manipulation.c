@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "strutil.h"
 
 /*
@@ -22,62 +23,94 @@ int main() {
     }
 
     printf("\n1. Case Conversion:\n");
-    printf("Original: %s\n", str_get_data(s));
+    char *data = str_get_data(s);
+    printf("Original: %s\n", data);
+    free(data);
     
     str_to_upper(s);
-    printf("Uppercase: %s\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Uppercase: %s\n", data);
+    free(data);
     
     str_to_lower(s);
-    printf("Lowercase: %s\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Lowercase: %s\n", data);
+    free(data);
     
     str_to_title_case(s);
-    printf("Title case: %s\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Title case: %s\n", data);
+    free(data);
 
     // String trimming
     printf("\n2. String Trimming:\n");
     str_set(s, "   Hello World   ");
-    printf("Original: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Original: '%s'\n", data);
+    free(data);
     
     str_trim(s);
-    printf("Trimmed: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Trimmed: '%s'\n", data);
+    free(data);
     
     str_set(s, "   Left and right   ");
-    printf("\nOriginal: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("\nOriginal: '%s'\n", data);
+    free(data);
     
     str_trim_left(s);
-    printf("Left trimmed: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Left trimmed: '%s'\n", data);
+    free(data);
     
     str_trim_right(s);
-    printf("Right trimmed: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Right trimmed: '%s'\n", data);
+    free(data);
 
     // Padding
     printf("\n3. String Padding:\n");
     str_set(s, "Test");
-    printf("Original: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Original: '%s'\n", data);
+    free(data);
     
     str_pad_left(s, 10, '*');
-    printf("Left padded: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Left padded: '%s'\n", data);
+    free(data);
     
     str_set(s, "Test");
     str_pad_right(s, 10, '*');
-    printf("Right padded: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Right padded: '%s'\n", data);
+    free(data);
 
     // Word operations
     printf("\n4. Word Operations:\n");
     str_set(s, "Hello beautiful world");
-    printf("Original: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Original: '%s'\n", data);
+    free(data);
     
-    str_rem_word(s, "beautiful");
-    printf("After removing 'beautiful': '%s'\n", str_get_data(s));
+    str_remove_word(s, "beautiful");
+    data = str_get_data(s);
+    printf("After removing 'beautiful': '%s'\n", data);
+    free(data);
     
     str_set(s, "Hello old world");
-    str_swap_word(s, "old", "new");
-    printf("After replacing 'old' with 'new': '%s'\n", str_get_data(s));
+    str_replace_word(s, "old", "new");
+    data = str_get_data(s);
+    printf("After replacing 'old' with 'new': '%s'\n", data);
+    free(data);
 
     // String searching
     printf("\n5. String Searching:\n");
     str_set(s, "Hello World! Hello Universe!");
-    printf("Original: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Original: '%s'\n", data);
+    free(data);
     
     size_t pos = str_find(s, "World", 0);
     if (pos != STR_NPOS) {
@@ -92,10 +125,14 @@ int main() {
     // String reversal
     printf("\n6. String Reversal:\n");
     str_set(s, "Hello World");
-    printf("Original: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Original: '%s'\n", data);
+    free(data);
     
     str_reverse(s);
-    printf("Reversed: '%s'\n", str_get_data(s));
+    data = str_get_data(s);
+    printf("Reversed: '%s'\n", data);
+    free(data);
 
     // Clean up
     str_free(s);

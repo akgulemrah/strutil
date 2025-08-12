@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "strutil.h"
 
 /*
@@ -22,7 +23,14 @@ int main() {
         str_free(s);
         return 1;
     }
-    printf("Initial string: %s\n", str_get_data(s));
+    char *s_data = str_get_data(s);
+    if (!s_data) {
+        fprintf(stderr, "Failed to get string data\n");
+        str_free(s);
+        return 1;
+    }
+    printf("Initial string: %s\n", s_data);
+    free(s_data);
     
     // Append to string
     if (str_add(s, " World!") != STR_OK) {
@@ -30,7 +38,14 @@ int main() {
         str_free(s);
         return 1;
     }
-    printf("After append: %s\n", str_get_data(s));
+    s_data = str_get_data(s);
+    if (!s_data) {
+        fprintf(stderr, "Failed to get string data after append\n");
+        str_free(s);
+        return 1;
+    }
+    printf("After append: %s\n", s_data);
+    free(s_data);
     
     // Get string properties
     printf("Length: %zu\n", str_get_size(s));
