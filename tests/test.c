@@ -1,9 +1,13 @@
 #include <check.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h> // For ULONG_MAX (though STR_NPOS is defined directly as -1)
 #include "strutil.h" // Include the header for the string utility library
+
+Str_err_t str_grow(struct str *self, size_t min_capacity);
+
 
 // Define some global string objects used across test cases.
 // These are managed by setup/teardown functions.
@@ -1474,7 +1478,7 @@ int main(void) {
     s = strutil_suite();
     sr = srunner_create(s);
 
-    srunner_run_all(sr, CK_NORMAL); // CK_VERBOSE for more detail, CK_NORMAL for summary
+    srunner_run_all(sr, CK_VERBOSE); // CK_VERBOSE for more detail, CK_NORMAL for summary
     number_failed = srunner_ntests_failed(sr);
     srunner_free(sr); // Clean up runner
 
