@@ -40,60 +40,7 @@ struct str {
  */
 struct str* str_init(void)
 {
-    pthread_mutexattr_t mutex_attr; // Attributes for mutex initialization
-
-    // Allocate memory for the main 'str' structure
-    struct str *self = (struct str *)malloc(sizeof(struct str));
-    if (!self) {
-        fprintf(stderr, "Error: malloc for str struct failed\n");
-        return NULL;
-    }
-
-    memset(self, 0, sizeof(struct str)); // Initialize all members to zero
-
-    // Allocate initial data buffer with minimum capacity
-    self->data = (char *)malloc(MIN_CAPACITY);
-    if (!self->data) {
-        free(self); // Free the 'str' struct if data allocation fails
-        fprintf(stderr, "Error: malloc for data buffer failed\n");
-        return NULL;
-    }
-    self->data[0] = '\0';          // Ensure null-termination for an empty string
-    self->capacity = MIN_CAPACITY; // Set initial capacity
-    self->length = 0;              // Initial length is 0
-
-    // Initialize mutex attributes
-    if (pthread_mutexattr_init(&mutex_attr) != 0) {
-        free(self->data); // Clean up data buffer
-        free(self);       // Clean up str struct
-        fprintf(stderr, "Error: pthread_mutexattr_init failed\n");
-        return NULL;
-    }
-
-    // Set mutex type to recursive to allow re-locking by the same thread
-    if (pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_RECURSIVE) != 0) {
-        free(self->data);
-        free(self);
-        pthread_mutexattr_destroy(&mutex_attr); // CLEANUP: Destroy attributes on failure
-        fprintf(stderr, "Error: pthread_mutexattr_settype failed\n");
-        return NULL;
-    }
-
-    // Initialize the mutex
-    if (pthread_mutex_init(&self->lock, &mutex_attr) != 0) {
-        pthread_mutexattr_destroy(&mutex_attr); // CLEANUP: Destroy attributes
-        free(self->data);
-        free(self);
-        fprintf(stderr, "Error: pthread_mutex_init failed\n");
-        return NULL;
-    }
-
-    pthread_mutexattr_destroy(&mutex_attr); // Destroy attributes after mutex is initialized
-
-    // Set flags to indicate dynamic allocation and mutex initialization
-    SET_FLAG(self->flags, STR_FLAG_DYNAMIC);
-    SET_FLAG(self->flags, STR_FLAG_MUTEX_INIT);
-    return self;
+    return str_alloc(MIN_CAPACITY);
 }
 
 /*
@@ -324,6 +271,9 @@ Str_err_t str_mov(struct str *dest, struct str **src)
 {
     if (!dest || !src || !(*src))
         return STR_NULL;
+
+    if (dest == *src)
+        return STR_OK;
 
     // To prevent deadlocks, acquire locks in a consistent order (e.g., by address)
     // Acquire lock for the one with lower address first.
@@ -572,7 +522,7 @@ Str_err_t str_to_upper(struct str *self)
 
     if (self->length > 0) {
         for (size_t i = 0; i < self->length; i++)
-            self->data[i] = (char)toupper(self->data[i]);
+            self->data[i] = (char)toupper((unsigned char)self->data[i]);
         SET_FLAG(self->flags, STR_FLAG_MODIFIED);
     }
     pthread_mutex_unlock(&self->lock);
@@ -600,7 +550,7 @@ Str_err_t str_to_lower(struct str *self)
 
     if (self->length > 0) {
         for (size_t i = 0; i < self->length; i++)
-            self->data[i] = (char)tolower(self->data[i]);
+            self->data[i] = (char)tolower((unsigned char)self->data[i]);
         SET_FLAG(self->flags, STR_FLAG_MODIFIED);
     }
     pthread_mutex_unlock(&self->lock);
@@ -630,14 +580,14 @@ Str_err_t str_to_title_case(struct str *self)
     if (self->length > 0) {
         bool new_word = true;
         for (size_t i = 0; i < self->length; i++) {
-            if (isalpha(self->data[i])) {
+            if (isalpha((unsigned char)self->data[i])) {
                 if (new_word) {
-                    self->data[i] = (char)toupper(self->data[i]);
+                    self->data[i] = (char)toupper((unsigned char)self->data[i]);
                     new_word = false;
                 } else {
-                    self->data[i] = (char)tolower(self->data[i]);
+                    self->data[i] = (char)tolower((unsigned char)self->data[i]);
                 }
-            } else if (isdigit(self->data[i])) {
+            } else if (isdigit((unsigned char)self->data[i])) {
                 new_word = false; // A number is part of a word
             } else {
                 new_word = true; // It's a separator
@@ -740,6 +690,11 @@ Str_err_t str_replace_word(struct str *self, const char *old_word, const char *n
     if (pthread_mutex_lock(&self->lock) != 0)
         return STR_LOCK;
 
+    if (old_word[0] == '\0') {
+        pthread_mutex_unlock(&self->lock);
+        return STR_INVALID;
+    }
+
     char *found = strstr(self->data, old_word); // Find the first occurrence of 'old_word'
     if (!found) {
         pthread_mutex_unlock(&self->lock);
@@ -834,7 +789,9 @@ Str_err_t str_read_line(struct str *self, FILE *stream)
     if (len > 0 && buffer[len-1] == '\n') {
         buffer[--len] = '\0'; 
     }
-    
+   
+    pthread_mutex_unlock(&self->lock);
+
     // Use str_assign_n to set the string's content.
     // The mutex is recursive, so str_assign_n can re-lock it without issue.
     // str_assign_n will handle mutex acquisition, growth, and copying.
@@ -948,7 +905,11 @@ void str_print(const struct str *self)
     if (!self || !self->data)
         return;
 
+    if (pthread_mutex_lock((pthread_mutex_t *)&self->lock) != 0)
+        return;
+
     printf("%s", self->data);
+    pthread_mutex_unlock((pthread_mutex_t *)&self->lock);
 }
 
 /*
@@ -1325,7 +1286,7 @@ Str_err_t str_trim_left(struct str *self)
 
     size_t i = 0;
     // Find the first non-whitespace character
-    while (i < self->length && isspace(self->data[i]))
+    while (i < self->length && isspace((unsigned char)self->data[i]))
         i++;
 
     if (i > 0) { // If any leading whitespace was found
@@ -1341,7 +1302,7 @@ Str_err_t str_trim_left(struct str *self)
 }
 
 /*
- * str_trim_right - Trim trailing whitespace from the string.
+ * str_trim_right - Trim trailing whitespace from the string.yüklememiz gerek
  *
  * Removes whitespace characters (as defined by `isspace()`) from the end of the string.
  * Thread-safe with mutex locking.
@@ -1360,7 +1321,7 @@ Str_err_t str_trim_right(struct str *self)
         return STR_LOCK;
 
     // Loop from the end of the string, removing trailing whitespace characters
-    while (self->length > 0 && isspace(self->data[self->length - 1]))
+    while (self->length > 0 && isspace((unsigned char)self->data[self->length - 1]))
         self->data[--self->length] = '\0'; // Set new null terminator, effectively shortening string
 
     // If the string becomes entirely empty after trimming
@@ -1391,42 +1352,57 @@ Str_err_t str_copy(struct str *dest, const struct str *source, size_t max_len)
 {
     if (!dest || !source || !source->data)
         return STR_NULL;
-    if (pthread_mutex_lock(&dest->lock) != 0) // Only lock the destination string, as source is `const`
+
+    if (dest == source)
+        return STR_OK;
+
+    pthread_mutex_t *lock1 = &dest->lock;
+    pthread_mutex_t *lock2 = (pthread_mutex_t *)&source->lock;
+
+    if (lock1 > lock2) {
+        pthread_mutex_t *temp = lock1;
+        lock1 = lock2;
+        lock2 = temp;
+    }
+
+    if (pthread_mutex_lock(lock1) != 0) return STR_LOCK;
+    if (lock1 != lock2 && pthread_mutex_lock(lock2) != 0) {
+        pthread_mutex_unlock(lock1);
         return STR_LOCK;
+    }
 
     Str_err_t err = STR_OK;
-    size_t source_len = source->length; // Get actual length of the source string
-    // Determine the number of characters to copy: minimum of source length and max_len
+    size_t source_len = source->length;
     size_t copy_len = (source_len < max_len) ? source_len : max_len;
 
-    // Check for string length overflow against global maximum
     if (copy_len > STR_MAX_STRING_SIZE) { 
-        pthread_mutex_unlock(&dest->lock);
+        if (lock1 != lock2) pthread_mutex_unlock(lock2);
+        pthread_mutex_unlock(lock1);
         return STR_OVERFLOW;
     }
 
-    // Check if the destination string is fixed-size and the copy would exceed its capacity
-    if (CHECK_FLAG(dest->flags, STR_FLAG_FIXED_SIZE) && (copy_len + 1) > dest->capacity) { // +1 for null term
-        pthread_mutex_unlock(&dest->lock);
+    if (CHECK_FLAG(dest->flags, STR_FLAG_FIXED_SIZE) && (copy_len + 1) > dest->capacity) {
+        if (lock1 != lock2) pthread_mutex_unlock(lock2);
+        pthread_mutex_unlock(lock1);
         return STR_MAXSIZE; 
     }
 
-    // Ensure `dest->data` buffer exists and has sufficient capacity for `copy_len` + null terminator
     if (!dest->data || dest->capacity <= copy_len) {
-        err = str_grow(dest, copy_len + 1); // Request growth for required characters + null
+        err = str_grow(dest, copy_len + 1);
         if (err != STR_OK) {
-            pthread_mutex_unlock(&dest->lock);
+            if (lock1 != lock2) pthread_mutex_unlock(lock2);
+            pthread_mutex_unlock(lock1);
             return err;
         }
     }
 
-    // Copy data from source to destination buffer
     memcpy(dest->data, source->data, copy_len);
-    dest->data[copy_len] = '\0'; // Explicitly null-terminate the copied string
-    dest->length = copy_len; // Update destination's length
+    dest->data[copy_len] = '\0';
+    dest->length = copy_len;
     SET_FLAG(dest->flags, STR_FLAG_MODIFIED);
 
-    pthread_mutex_unlock(&dest->lock);
+    if (lock1 != lock2) pthread_mutex_unlock(lock2);
+    pthread_mutex_unlock(lock1);
     return STR_OK;
 }
 
@@ -1517,9 +1493,9 @@ Str_err_t _str_realloc(struct str **self, const size_t new_size)
     if (!self || !(*self))
         return STR_NULL; // Invalid input pointer
 
-    if (new_size == 0) { 
-        // Special case: `new_size == 0` is interpreted as a request to completely free the object.
-        _str_free(self); // Call the dedicated free function
+    if (new_size == 0) {
+        /* Free the object without assuming the caller holds the mutex. */
+        _str_free(self);
         return STR_OK;
     }
 
@@ -1669,16 +1645,16 @@ Str_err_t str_set(struct str *self, const char *data)
 {
     if (!self || !data)
         return STR_NULL;
+
+    // Check if the string is marked as read-only.
+    if (CHECK_FLAG(self->flags, STR_FLAG_READONLY))
+        return STR_INVALID;
     
     // If the input data is an empty string, clear the current string's content.
     if (data[0] == '\0') {
         str_clear(self); // `str_clear` handles its own locking and setting length to 0
         return STR_OK;
     }
-
-    // Check if the string is marked as read-only.
-    if (CHECK_FLAG(self->flags, STR_FLAG_READONLY))
-        return STR_INVALID;
 
     // Acquire mutex for thread-safe access.
     if (pthread_mutex_lock(&self->lock) != 0)
